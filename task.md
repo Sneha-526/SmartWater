@@ -5,7 +5,7 @@
 - [ ] Install @google/generative-ai in backend
 
 ## Phase 2: CSS / Design
-- [ ] Enhance index.css (glassmorphism + neumorphism + animations)
+- [ ] make the website responsive for laptop/mobile/tablet
 
 ## Phase 3: Map (OSRM routing, no API key)
 - [ ] Rewrite DeliveryMap.jsx (OSRM routing, directions, distance/ETA, Zomato-style)
