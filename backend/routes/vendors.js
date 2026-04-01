@@ -117,21 +117,28 @@ router.get('/me', protect, vendorOnly, async (req, res) => {
 // PUT /api/vendors/availability
 router.put('/availability', protect, vendorOnly, async (req, res) => {
   try {
-    const { is_available } = req.body;
-    const { data, error } = await supabaseAdmin
+    const is_available = req.body.is_available ?? req.body.isAvailable;
+
+    if (is_available === undefined)
+      return res.status(400).json({ success: false, message: 'is_available is required.' });
+
+    // ✅ Remove .single() — just update without fetching back
+    const { error } = await supabaseAdmin
       .from('vendors')
       .update({ is_available })
-      .eq('id', req.user.id)
-      .select('is_available')
-      .single();
+      .eq('id', req.user.id);
 
-    if (error) return res.status(500).json({ success: false, message: 'Update failed.' });
-    res.json({ success: true, is_available: data.is_available });
+    if (error) {
+      console.error('[Vendors] availability error:', error.message);
+      return res.status(500).json({ success: false, message: 'Update failed.' });
+    }
+
+    res.json({ success: true, is_available });
   } catch (err) {
+    console.error('[Vendors] availability error:', err.message);
     res.status(500).json({ success: false, message: 'Server error.' });
   }
 });
-
 // PUT /api/vendors/location
 router.put('/location', protect, vendorOnly, async (req, res) => {
   try {

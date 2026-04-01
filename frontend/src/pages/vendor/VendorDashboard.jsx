@@ -316,8 +316,8 @@ const VendorDashboard = () => {
   const handleToggleAvailability = async () => {
     try {
       const { data } = await api.put('/vendors/availability', { isAvailable: !isAvailable });
-      setIsAvailable(data.isAvailable);
-      toast.success(data.isAvailable ? '✅ You are now available' : '⏸️ Availability turned off');
+      setIsAvailable(data.is_available); // ✅ snake_case from backend
+      toast.success(data.is_available ? '✅ You are now available' : '⏸️ Availability turned off');
     } catch {
       toast.error('Failed to update availability.');
     }
@@ -462,7 +462,7 @@ const VendorDashboard = () => {
               {activeTab === 'new'
                 ? isAvailable ? 'New orders will appear here in real-time' : 'Turn on availability to receive orders'
                 : activeTab === 'active' ? 'Accept orders to start delivering'
-                : 'Completed orders will show here'}
+                  : 'Completed orders will show here'}
             </div>
           </div>
         ) : (

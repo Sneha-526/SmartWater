@@ -36,13 +36,15 @@ export const AuthProvider = ({ children }) => {
   const enrichUser = async (supabaseUser, token) => {
     try {
       const role = supabaseUser.user_metadata?.role || 'user';
-      const table = role === 'vendor' ? 'vendors' : 'profiles';
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const endpoint = role === 'vendor' ? '/vendors/me' : '/users/me';
 
-      const { data: profile } = await supabase
-        .from(table)
-        .select('*')
-        .eq('id', supabaseUser.id)
-        .single();
+      const res = await fetch(`${API_URL}${endpoint}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      const profile = role === 'vendor' ? data.vendor : data.user;
 
       setUser({
         id: supabaseUser.id,
