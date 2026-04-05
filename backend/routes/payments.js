@@ -5,10 +5,10 @@ const crypto = require('crypto');
 const { supabaseAdmin } = require('../config/supabase');
 const { protect, userOnly } = require('../middleware/auth');
 
-const razorpay = new Razorpay({
+const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+}) : null;
 
 // POST /api/payments/create-order — Create Razorpay order
 router.post('/create-order', protect, userOnly, async (req, res) => {
