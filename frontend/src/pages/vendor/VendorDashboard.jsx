@@ -14,27 +14,35 @@ const STATUS_FLOW = {
 };
 
 const STATUS_LABELS = {
-  on_the_way: '🚚 Mark On The Way',
-  delivered: '📦 Mark Delivered',
-  rejected: '❌ Reject Order',
+  on_the_way: '🚚 On The Way',
+  delivered: '📦 Delivered',
+  rejected: '❌ Reject',
+};
+
+// Simple hook to track screen width
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 640);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return isMobile;
 };
 
 const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
+  const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
 
-  // Fetch distance to customer when expanding a non-pending order
   const handleExpand = () => {
     const next = !expanded;
     setExpanded(next);
     const deliveryLat = order.delivery_lat;
     const deliveryLng = order.delivery_lng;
     if (next && deliveryLat && !routeInfo && order.status !== 'pending') {
-      if (!navigator.geolocation) {
-        setRouteInfo(false); // no geolocation support
-        return;
-      }
+      if (!navigator.geolocation) { setRouteInfo(false); return; }
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           fetchRoute(
@@ -42,7 +50,7 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
             { lat: deliveryLat, lng: deliveryLng }
           ).then((r) => setRouteInfo(r || false));
         },
-        () => setRouteInfo(false), // permission denied or error
+        () => setRouteInfo(false),
         { timeout: 8000, maximumAge: 60000 }
       );
     }
@@ -90,8 +98,8 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
 
         {/* Address */}
         <div style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.35rem', marginBottom: '0.6rem' }}>
-          <span>📍</span>
-          <span style={{ lineHeight: 1.4 }}>{order.delivery_address}</span>
+          <span style={{ flexShrink: 0 }}>📍</span>
+          <span style={{ lineHeight: 1.4, wordBreak: 'break-word' }}>{order.delivery_address}</span>
         </div>
 
         {/* Items */}
@@ -114,23 +122,16 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
         {/* Amount + Payment */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{
-            fontSize: '1.1rem',
-            fontWeight: 800,
+            fontSize: '1.1rem', fontWeight: 800,
             background: 'var(--gradient-accent)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
           }}>
             {formatCurrency(Number(order.total_amount || 0))}
           </span>
           <span style={{
-            fontSize: '0.78rem',
-            padding: '0.2rem 0.6rem',
-            background: 'rgba(245,158,11,0.1)',
-            border: '1px solid rgba(245,158,11,0.25)',
-            borderRadius: 'var(--radius-full)',
-            color: 'var(--status-pending)',
-            fontWeight: 600,
+            fontSize: '0.78rem', padding: '0.2rem 0.6rem',
+            background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)',
+            borderRadius: 'var(--radius-full)', color: 'var(--status-pending)', fontWeight: 600,
           }}>
             {order.payment_mode?.toUpperCase()}
           </span>
@@ -140,21 +141,14 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
       {/* Expanded details */}
       {expanded && (
         <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-subtle)' }}>
-
-          {/* Item price breakdown */}
+          {/* Item breakdown */}
           <div style={{ marginBottom: '1rem' }}>
             <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
               Order Breakdown
             </h4>
             {(order.order_items || []).map((item, i) => (
-              <div key={item.id || i} style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                fontSize: '0.85rem',
-                padding: '0.3rem 0',
-                borderBottom: '1px solid var(--border-subtle)',
-              }}>
-                <span style={{ color: 'var(--text-secondary)' }}>
+              <div key={item.id || i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.3rem 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                <span style={{ color: 'var(--text-secondary)', flex: 1, marginRight: '0.5rem' }}>
                   {item.quantity}× {item.product_name} ({item.size}) @ ₹{item.price_per_unit}
                 </span>
                 <span>₹{item.subtotal}</span>
@@ -166,7 +160,7 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
             </div>
           </div>
 
-          {/* Map preview */}
+          {/* Map */}
           {order.delivery_lat && (
             <div style={{ marginBottom: '1rem' }}>
               <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
@@ -175,105 +169,80 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
               <DeliveryMap
                 position={{ lat: order.delivery_lat, lng: order.delivery_lng }}
                 readonly
-                height={200}
+                height={isMobile ? 160 : 200}
                 popupText={order.delivery_address}
               />
-
-              {/* Distance + Directions bar (for active, non-pending orders) */}
               {isMyOrder && (
-                <div className="direction-bar" style={{
+                <div style={{
                   display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap',
                   marginTop: '0.6rem', padding: '0.6rem 0.9rem',
-                  background: 'rgba(0,210,255,0.06)',
-                  border: '1px solid rgba(0,210,255,0.18)',
+                  background: 'rgba(0,210,255,0.06)', border: '1px solid rgba(0,210,255,0.18)',
                   borderRadius: 'var(--radius-md)',
                 }}>
                   {routeInfo ? (
                     <>
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        📏 <strong style={{ color: 'var(--primary)' }}>{routeInfo.distance} km</strong> away
+                        📏 <strong style={{ color: 'var(--primary)' }}>{routeInfo.distance} km</strong>
                       </span>
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        ⏱ <strong style={{ color: 'var(--accent)' }}>{routeInfo.duration} min</strong> ETA
+                        ⏱ <strong style={{ color: 'var(--accent)' }}>{routeInfo.duration} min</strong>
                       </span>
                     </>
                   ) : (
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      📍 {routeInfo === false ? 'Location unavailable' : 'Calculating route...'}
+                      {routeInfo === false ? '📍 Location unavailable' : '📍 Calculating route...'}
                     </span>
                   )}
-                  {/* Universal directions link — opens native Maps on iOS/Android */}
                   <a
                     href={`https://www.google.com/maps/dir/?api=1&destination=${order.delivery_lat},${order.delivery_lng}&travelmode=driving`}
                     target="_blank"
                     rel="noreferrer"
                     className="btn-directions"
-                    style={{ marginLeft: 'auto', fontSize: '0.82rem', padding: '0.45rem 1rem',
-                      background: 'linear-gradient(135deg,#00d2ff,#0047ab)',
-                      color: 'white', borderRadius: 'var(--radius-full)',
-                      fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
-                      textDecoration: 'none', boxShadow: '0 2px 10px rgba(0,210,255,0.3)',
-                      whiteSpace: 'nowrap',
-                    }}
+                    style={{ marginLeft: 'auto' }}
                     onClick={(e) => {
-                      // On mobile, try to open native maps first
-                      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-                      if (isMobile) {
+                      const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                      if (isMobileDevice) {
                         e.preventDefault();
-                        // Try native geo: URI first (Android), then maps:// (iOS)
                         const dest = `${order.delivery_lat},${order.delivery_lng}`;
                         if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
                           window.location.href = `maps://maps.apple.com/?daddr=${dest}&dirflg=d`;
                         } else {
                           window.location.href = `geo:${dest}?q=${dest}(Delivery+Location)`;
                         }
-                        // Web fallback after 500ms if native app didn't open
                         setTimeout(() => {
                           window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`, '_blank');
                         }, 800);
                       }
                     }}
                   >
-                    🧭 Get Directions
+                    🧭 Directions
                   </a>
                 </div>
               )}
-
             </div>
           )}
 
           {order.notes && (
-            <div style={{
-              padding: '0.5rem 0.75rem',
-              background: 'rgba(0,0,0,0.2)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.84rem',
-              color: 'var(--text-secondary)',
-              marginBottom: '1rem',
-            }}>
+            <div style={{ padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-sm)', fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
               📝 {order.notes}
             </div>
           )}
 
           {/* Actions */}
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {isNew && (
               <>
                 <button
-                  id={`accept-order-${order.id?.toString().slice(-6)}`}
                   className="btn btn-success"
+                  style={{ flex: 1, minWidth: '120px', justifyContent: 'center' }}
                   disabled={accepting === order.id}
                   onClick={() => onAccept(order.id)}
                 >
-                  {accepting === order.id ? (
-                    <><span className="spinner spinner-sm" /> Accepting...</>
-                  ) : (
-                    '✅ Accept Order'
-                  )}
+                  {accepting === order.id ? <><span className="spinner spinner-sm" /> Accepting...</> : '✅ Accept'}
                 </button>
                 <button
-                  id={`reject-order-${order.id?.toString().slice(-6)}`}
                   className="btn btn-danger"
+                  style={{ flex: 1, minWidth: '100px', justifyContent: 'center' }}
                   disabled={accepting === order.id}
                   onClick={async () => {
                     setUpdatingStatus('rejecting');
@@ -290,20 +259,15 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
                 </button>
               </>
             )}
-
             {isMyOrder && nextStatuses.map((ns) => (
               <button
                 key={ns}
-                id={`status-${ns}-${order.id?.toString().slice(-6)}`}
                 className={ns === 'rejected' ? 'btn btn-danger' : 'btn btn-success'}
+                style={{ flex: 1, minWidth: '120px', justifyContent: 'center' }}
                 disabled={!!updatingStatus}
                 onClick={() => handleStatus(ns)}
               >
-                {updatingStatus === ns ? (
-                  <><span className="spinner spinner-sm" /> Updating...</>
-                ) : (
-                  STATUS_LABELS[ns]
-                )}
+                {updatingStatus === ns ? <><span className="spinner spinner-sm" /> Updating...</> : STATUS_LABELS[ns]}
               </button>
             ))}
           </div>
@@ -318,11 +282,12 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
 const VendorDashboard = () => {
   const { user } = useAuth();
   const { on, off } = useSocket();
+  const isMobile = useIsMobile();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(null);
   const [isAvailable, setIsAvailable] = useState(true);
-  const [activeTab, setActiveTab] = useState('new'); // 'new' | 'active' | 'done'
+  const [activeTab, setActiveTab] = useState('new');
 
   const fetchOrders = async () => {
     try {
@@ -335,41 +300,26 @@ const VendorDashboard = () => {
     }
   };
 
-  useEffect(() => {
-    fetchOrders();
-  }, []);
+  useEffect(() => { fetchOrders(); }, []);
 
-  // Socket.IO realtime
   useEffect(() => {
     const handleNewOrder = (order) => {
       setOrders((prev) => {
         if (prev.find((o) => o.id === order.id)) return prev;
         playNotificationSound();
-        toast('🔔 New order received!', {
-          icon: '💧',
-          style: { fontWeight: 700 },
-        });
+        toast('🔔 New order received!', { icon: '💧', style: { fontWeight: 700 } });
         return [order, ...prev];
       });
     };
-
     const handleUnavailable = ({ orderId }) => {
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === orderId && o.status === 'pending'
-            ? { ...o, status: 'accepted', vendor_id: 'another' }
-            : o
-        )
-      );
+      setOrders((prev) => prev.map((o) =>
+        o.id === orderId && o.status === 'pending'
+          ? { ...o, status: 'accepted', vendor_id: 'another' } : o
+      ));
     };
-
     on('newOrder', handleNewOrder);
     on('orderUnavailable', handleUnavailable);
-
-    return () => {
-      off('newOrder', handleNewOrder);
-      off('orderUnavailable', handleUnavailable);
-    };
+    return () => { off('newOrder', handleNewOrder); off('orderUnavailable', handleUnavailable); };
   }, [on, off]);
 
   const handleAccept = async (orderId) => {
@@ -378,7 +328,7 @@ const VendorDashboard = () => {
       const { data } = await api.put(`/orders/${orderId}/accept`);
       if (data.success) {
         setOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
-        toast.success('✅ Order accepted! Get ready for delivery.');
+        toast.success('✅ Order accepted!');
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to accept order.');
@@ -402,7 +352,7 @@ const VendorDashboard = () => {
   const handleToggleAvailability = async () => {
     try {
       const { data } = await api.put('/vendors/availability', { isAvailable: !isAvailable });
-      setIsAvailable(data.is_available); // ✅ snake_case from backend
+      setIsAvailable(data.is_available);
       toast.success(data.is_available ? '✅ You are now available' : '⏸️ Availability turned off');
     } catch {
       toast.error('Failed to update availability.');
@@ -414,9 +364,9 @@ const VendorDashboard = () => {
   const completedOrders = orders.filter((o) => o.vendor_id === user?.id && ['delivered', 'rejected'].includes(o.status));
 
   const tabs = [
-    { key: 'new', label: '🔔 New Orders', count: pendingOrders.length, data: pendingOrders },
-    { key: 'active', label: '🚚 Active', count: myActiveOrders.length, data: myActiveOrders },
-    { key: 'done', label: '📦 Completed', count: completedOrders.length, data: completedOrders },
+    { key: 'new', label: isMobile ? '🔔 New' : '🔔 New Orders', count: pendingOrders.length, data: pendingOrders },
+    { key: 'active', label: isMobile ? '🚚 Active' : '🚚 Active', count: myActiveOrders.length, data: myActiveOrders },
+    { key: 'done', label: isMobile ? '📦 Done' : '📦 Completed', count: completedOrders.length, data: completedOrders },
   ];
 
   const currentTab = tabs.find((t) => t.key === activeTab);
@@ -441,25 +391,27 @@ const VendorDashboard = () => {
         <div className="card animate-fadeInUp" style={{
           background: 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(0,71,171,0.12) 100%)',
           marginBottom: '1.5rem',
-          padding: '1.5rem 2rem',
+          padding: isMobile ? '1rem' : '1.5rem 2rem',
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            justifyContent: 'space-between',
+            alignItems: isMobile ? 'flex-start' : 'center',
+            gap: '0.75rem',
+          }}>
             <div>
-              <h2 style={{ fontSize: '1.4rem' }}>Vendor Dashboard 🏪</h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                {user?.name} · {pendingOrders.length} new order{pendingOrders.length !== 1 ? 's' : ''} waiting
+              <h2 style={{ fontSize: isMobile ? '1.1rem' : '1.4rem' }}>Vendor Dashboard 🏪</h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.15rem' }}>
+                {user?.name} · {pendingOrders.length} new order{pendingOrders.length !== 1 ? 's' : ''}
               </p>
             </div>
             <div className="toggle-container">
-              <span className="toggle-label" style={{ color: isAvailable ? 'var(--status-delivered)' : 'var(--text-muted)', fontWeight: 600 }}>
+              <span className="toggle-label" style={{ color: isAvailable ? 'var(--status-delivered)' : 'var(--text-muted)', fontWeight: 600, fontSize: isMobile ? '0.85rem' : '0.9rem' }}>
                 {isAvailable ? '🟢 Available' : '🔴 Offline'}
               </span>
               <label className="toggle" id="availability-toggle">
-                <input
-                  type="checkbox"
-                  checked={isAvailable}
-                  onChange={handleToggleAvailability}
-                />
+                <input type="checkbox" checked={isAvailable} onChange={handleToggleAvailability} />
                 <span className="toggle-slider" />
               </label>
             </div>
@@ -469,8 +421,8 @@ const VendorDashboard = () => {
         {/* Stats */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-          gap: '1rem',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: isMobile ? '0.6rem' : '1rem',
           marginBottom: '1.5rem',
         }}>
           {[
@@ -484,25 +436,26 @@ const VendorDashboard = () => {
               color: 'var(--accent)',
             },
           ].map((stat) => (
-            <div key={stat.label} className="card" style={{ padding: '1rem', textAlign: 'center' }}>
-              <div style={{ fontSize: '1.5rem', marginBottom: '0.35rem' }}>{stat.icon}</div>
-              <div style={{ fontSize: stat.value > 999 ? '1.05rem' : '1.3rem', fontWeight: 800, color: stat.color }}>
-                {stat.value}
-              </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{stat.label}</div>
+            <div key={stat.label} className="card" style={{ padding: isMobile ? '0.75rem' : '1rem', textAlign: 'center' }}>
+              <div style={{ fontSize: isMobile ? '1.25rem' : '1.5rem', marginBottom: '0.25rem' }}>{stat.icon}</div>
+              <div style={{ fontSize: isMobile ? '1rem' : '1.3rem', fontWeight: 800, color: stat.color }}>{stat.value}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{stat.label}</div>
             </div>
           ))}
         </div>
 
-        {/* Tabs */}
+        {/* Tabs — fixed overflow */}
         <div style={{
           display: 'flex',
-          gap: '0.5rem',
+          gap: '0.4rem',
           marginBottom: '1.25rem',
           background: 'rgba(0,0,0,0.2)',
-          padding: '0.4rem',
+          padding: '0.35rem',
           borderRadius: 'var(--radius-md)',
           border: '1px solid var(--border)',
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
         }}>
           {tabs.map((tab) => (
             <button
@@ -512,22 +465,26 @@ const VendorDashboard = () => {
               className="btn btn-sm"
               style={{
                 flex: 1,
+                minWidth: isMobile ? '80px' : 'auto',
+                whiteSpace: 'nowrap',
                 background: activeTab === tab.key ? 'var(--gradient-primary)' : 'transparent',
                 color: activeTab === tab.key ? 'white' : 'var(--text-muted)',
                 border: 'none',
                 borderRadius: 'var(--radius-sm)',
                 boxShadow: activeTab === tab.key ? '0 2px 12px rgba(0,210,255,0.3)' : 'none',
                 transition: 'var(--transition)',
+                fontSize: isMobile ? '0.78rem' : '0.85rem',
+                padding: isMobile ? '0.4rem 0.6rem' : '0.5rem 1rem',
               }}
             >
               {tab.label}
               {tab.count > 0 && (
                 <span style={{
-                  marginLeft: '0.35rem',
-                  padding: '0.05rem 0.5rem',
+                  marginLeft: '0.3rem',
+                  padding: '0.05rem 0.4rem',
                   background: activeTab === tab.key ? 'rgba(255,255,255,0.25)' : 'rgba(0,210,255,0.15)',
                   borderRadius: '4px',
-                  fontSize: '0.7rem',
+                  fontSize: '0.65rem',
                   fontWeight: 700,
                 }}>
                   {tab.count}

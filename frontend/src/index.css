@@ -2010,3 +2010,51 @@ a:hover { color: var(--primary-light); }
   .qty-btn { min-width: 36px; min-height: 36px; }
   .auth-tab { min-height: 40px; }
 }
+
+/* Add these rules to the bottom of your index.css */
+
+/* ── Navbar responsive split ── */
+.navbar-desktop {
+  display: flex;
+}
+
+.navbar-mobile {
+  display: none;
+}
+
+.hide-xs {
+  display: inline;
+}
+
+@media (max-width: 640px) {
+  .navbar-desktop {
+    display: none;
+  }
+
+  .navbar-mobile {
+    display: flex;
+  }
+
+  .hide-xs {
+    display: none;
+  }
+}
+.navbar-brand {
+  flex-shrink: 0;
+}
+
+/* Override for landing page where buttons compete for space */
+@media (max-width: 400px) {
+  .navbar-brand {
+    font-size: 0.95rem !important;
+  }
+
+  .navbar-brand .brand-icon {
+    font-size: 1.1rem;
+  }
+
+  .btn-sm {
+    padding: 0.4rem 0.65rem;
+    font-size: 0.75rem;
+  }
+}

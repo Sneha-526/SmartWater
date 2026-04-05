@@ -12,23 +12,25 @@ const FeatureCard = ({ icon, title, desc }) => (
 const LandingPage = () => {
   return (
     <div className="page">
+      {/* Navbar */}
       <nav className="navbar">
         <div className="navbar-inner">
           <div className="navbar-brand">
             <span className="brand-icon">💧</span>
             SmartAqua
           </div>
-          <div className="navbar-actions">
+          <div className="navbar-actions" style={{ gap: '0.5rem' }}>
             <Link to="/login/user" className="btn btn-secondary btn-sm" id="user-login-nav">
-              Customer Login
+              <span className="hide-xs"></span>Customer
             </Link>
             <Link to="/login/vendor" className="btn btn-primary btn-sm" id="vendor-login-nav">
-              Vendor Login
+              <span className="hide-xs"></span>Vendor
             </Link>
           </div>
         </div>
       </nav>
 
+      {/* Hero */}
       <section className="hero" style={{ position: 'relative', zIndex: 1 }}>
         <div className="hero-tagline">
           <span>⚡</span> Real-time water delivery
@@ -42,7 +44,13 @@ const LandingPage = () => {
           Track your delivery in real-time.
         </p>
 
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '3rem' }}>
+        <div className="hero-cta" style={{
+          display: 'flex',
+          gap: '1rem',
+          justifyContent: 'center',
+          flexWrap: 'wrap',
+          marginBottom: '3rem',
+        }}>
           <Link to="/login/user" className="btn btn-primary btn-lg" id="get-started-btn">
             🚀 Order Water Now
           </Link>
@@ -52,22 +60,17 @@ const LandingPage = () => {
         </div>
 
         <div className="stats-row">
-          <div className="stat-item">
-            <div className="stat-value">500+</div>
-            <div className="stat-label">Happy Customers</div>
-          </div>
-          <div className="stat-item">
-            <div className="stat-value">50+</div>
-            <div className="stat-label">Active Vendors</div>
-          </div>
-          <div className="stat-item">
-            <div className="stat-value">30min</div>
-            <div className="stat-label">Avg Delivery</div>
-          </div>
-          <div className="stat-item">
-            <div className="stat-value">4.9★</div>
-            <div className="stat-label">Rating</div>
-          </div>
+          {[
+            { value: '500+', label: 'Happy Customers' },
+            { value: '50+', label: 'Active Vendors' },
+            { value: '30min', label: 'Avg Delivery' },
+            { value: '4.9★', label: 'Rating' },
+          ].map((s) => (
+            <div key={s.label} className="stat-item">
+              <div className="stat-value">{s.value}</div>
+              <div className="stat-label">{s.label}</div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -80,43 +83,28 @@ const LandingPage = () => {
           </p>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
             gap: '1.25rem',
           }}>
-            <FeatureCard
-              icon="📍"
-              title="GPS + Map Selection"
-              desc="Use your GPS location or click on the map to set your precise delivery address."
-            />
-            <FeatureCard
-              icon="⚡"
-              title="Real-time Tracking"
-              desc="Get instant notifications as your order moves from accepted to on the way to delivered."
-            />
-            <FeatureCard
-              icon="🧊"
-              title="Multiple Jar Sizes"
-              desc="Choose from 1L, 2L, 10L, and 20L jars. Mix and match quantities as you need."
-            />
-            <FeatureCard
-              icon="🔒"
-              title="Secure & Reliable"
-              desc="JWT-secured accounts, verified vendors, and guaranteed delivery tracking."
-            />
+            <FeatureCard icon="📍" title="GPS + Map Selection" desc="Use your GPS location or click on the map to set your precise delivery address." />
+            <FeatureCard icon="⚡" title="Real-time Tracking" desc="Get instant notifications as your order moves from accepted to on the way to delivered." />
+            <FeatureCard icon="🧊" title="Multiple Jar Sizes" desc="Choose from 1L, 2L, 10L, and 20L jars. Mix and match quantities as you need." />
+            <FeatureCard icon="🔒" title="Secure & Reliable" desc="JWT-secured accounts, verified vendors, and guaranteed delivery tracking." />
           </div>
         </div>
       </section>
 
-      {/* Jar Sizes Pricing Section */}
+      {/* Jar Sizes Pricing — FIXED: responsive grid */}
       <section style={{ padding: '2rem 1.5rem 5rem', position: 'relative', zIndex: 1 }}>
         <div className="container">
           <h2 style={{ textAlign: 'center', marginBottom: '0.75rem' }}>Water Jar Sizes</h2>
           <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginBottom: '2.5rem' }}>
             Transparent pricing, no hidden fees
           </p>
+          {/* ✅ Fixed: use auto-fit so it wraps on small screens */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
             gap: '1rem',
             maxWidth: '700px',
             margin: '0 auto',
