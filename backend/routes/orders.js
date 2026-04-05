@@ -171,11 +171,10 @@ router.put('/:id/accept', protect, vendorOnly, async (req, res) => {
     await supabaseAdmin.rpc('increment_vendor_orders', { vendor_id_param: req.user.id }).catch(() => { });
 
     const fullOrder = await getFullOrder(req.params.id);
+    if (!fullOrder) throw new Error('Failed to retrieve created order.');
+    emitNewOrder(fullOrder);
+    res.status(201).json({ success: true, message: 'Order placed successfully.', order: fullOrder });
 
-    emitOrderAccepted(existing.user_id, fullOrder);
-    emitOrderUnavailable(req.params.id);
-
-    res.json({ success: true, message: 'Order accepted.', order: fullOrder });
   } catch (err) {
     console.error('[Orders] Accept error:', err.message);
     res.status(500).json({ success: false, message: 'Server error.' });

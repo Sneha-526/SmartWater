@@ -102,10 +102,25 @@ const PlaceOrder = () => {
         const scriptOk = await loadRazorpayScript();
         if (!scriptOk) { toast.error('Payment gateway failed to load.'); setLoading(false); return; }
 
-        const { data: payData } = await api.post('/payments/create-order', {
-          orderId: data.order.id, amount: total,
-        });
-
+        if (!data.order || !data.order.id) {
+  toast.error('Order creation failed.');
+  setLoading(false);
+  return;
+}
+if (!data.order || !data.order.id) {
+  toast.error('Order creation failed. Please try again.');
+  setLoading(false);
+  return;
+}
+const { data: payData } = await api.post('/payments/create-order', {
+  orderId: data.order.id,
+  amount: total,
+});
+        if (!user) {
+          toast.error('Session expired. Please log in again.');
+          navigate('/');
+          return;
+        }
         openRazorpayCheckout({
           keyId: payData.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
           razorpayOrderId: payData.razorpayOrderId,
