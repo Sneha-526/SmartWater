@@ -35,13 +35,13 @@ const UserDashboard = () => {
   // Socket.IO realtime listeners
   useEffect(() => {
     const handleAccepted = (order) => {
-      setOrders((prev) => prev.map((o) => (o._id === order._id ? order : o)));
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? order : o)));
       playNotificationSound();
-      toast.success(`🚛 Your order was accepted by ${order.vendorId?.name || 'a vendor'}!`);
+      toast.success(`🚛 Your order was accepted by ${order.vendor?.name || 'a vendor'}!`);
     };
 
     const handleStatusUpdate = (order) => {
-      setOrders((prev) => prev.map((o) => (o._id === order._id ? order : o)));
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? order : o)));
       const msgs = {
         on_the_way: '🚚 Your order is on the way!',
         delivered: '📦 Order delivered! Enjoy your water.',
@@ -128,7 +128,7 @@ const UserDashboard = () => {
             { label: 'Delivered', value: orders.filter(o => o.status === 'delivered').length, icon: '✅', color: 'var(--status-delivered)' },
             {
               label: 'Total Spent',
-              value: formatCurrency(orders.filter(o => o.status === 'delivered').reduce((acc, o) => acc + o.totalAmount, 0)),
+              value: formatCurrency(orders.filter(o => o.status === 'delivered').reduce((acc, o) => acc + Number(o.total_amount || 0), 0)),
               icon: '💰',
               color: 'var(--accent)',
             },
@@ -174,10 +174,10 @@ const UserDashboard = () => {
           ) : (
             activeOrders.map((order) => (
               <OrderCard
-                key={order._id}
+                key={order.id}
                 order={order}
-                expanded={expandedId === order._id}
-                onToggle={() => setExpandedId(expandedId === order._id ? null : order._id)}
+                expanded={expandedId === order.id}
+                onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
               >
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   {/* Timeline */}
@@ -193,16 +193,16 @@ const UserDashboard = () => {
                     <h4 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Order Details
                     </h4>
-                    {order.jars?.map((jar, i) => (
-                      <div key={i} style={{
+                    {(order.order_items || []).map((item, i) => (
+                      <div key={item.id || i} style={{
                         display: 'flex',
                         justifyContent: 'space-between',
                         padding: '0.35rem 0',
                         fontSize: '0.85rem',
                         borderBottom: '1px solid var(--border-subtle)',
                       }}>
-                        <span>{jar.quantity}× {jar.size} jar</span>
-                        <span style={{ color: 'var(--primary)' }}>₹{jar.subtotal}</span>
+                        <span>{item.quantity}× {item.product_name} ({item.size})</span>
+                        <span style={{ color: 'var(--primary)' }}>₹{item.subtotal}</span>
                       </div>
                     ))}
                     <div style={{
@@ -213,18 +213,18 @@ const UserDashboard = () => {
                       fontSize: '0.95rem',
                     }}>
                       <span>Total</span>
-                      <span style={{ color: 'var(--accent)' }}>₹{order.totalAmount}</span>
+                      <span style={{ color: 'var(--accent)' }}>{formatCurrency(Number(order.total_amount || 0))}</span>
                     </div>
 
                     {/* Vendor info after acceptance */}
-                    {order.vendorId && (
+                    {order.vendor && (
                       <div className="vendor-info-card">
                         <div className="vendor-avatar">🏪</div>
                         <div className="vendor-info-details">
-                          <h4>{order.vendorId.name}</h4>
-                          <p>📞 {order.vendorId.phone}</p>
-                          {order.vendorId.rating && (
-                            <p>⭐ {order.vendorId.rating}/5</p>
+                          <h4>{order.vendor.name}</h4>
+                          <p>📞 {order.vendor.phone}</p>
+                          {order.vendor.rating && (
+                            <p>⭐ {order.vendor.rating}/5</p>
                           )}
                         </div>
                       </div>
@@ -238,10 +238,10 @@ const UserDashboard = () => {
                     Delivery Location
                   </h4>
                   <DeliveryMap
-                    position={order.deliveryLocation}
+                    position={order.delivery_lat ? { lat: order.delivery_lat, lng: order.delivery_lng } : null}
                     readonly
                     height={160}
-                    popupText={order.deliveryAddress}
+                    popupText={order.delivery_address}
                   />
                 </div>
               </OrderCard>
@@ -263,7 +263,7 @@ const UserDashboard = () => {
             </div>
 
             {pastOrders.slice(0, 3).map((order) => (
-              <OrderCard key={order._id} order={order} />
+              <OrderCard key={order.id} order={order} />
             ))}
           </div>
         )}

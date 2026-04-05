@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import Navbar from '../../components/Navbar';
-import DeliveryMap from '../../components/DeliveryMap';
+import DeliveryMap, { fetchRoute } from '../../components/DeliveryMap';
 import { StatusBadge } from '../../components/OrderCard';
 import api from '../../utils/api';
 import { formatCurrency, formatDate, playNotificationSound } from '../../utils/helpers';
@@ -22,29 +22,54 @@ const STATUS_LABELS = {
 const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
   const [expanded, setExpanded] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(null);
+  const [routeInfo, setRouteInfo] = useState(null);
+
+  // Fetch distance to customer when expanding a non-pending order
+  const handleExpand = () => {
+    const next = !expanded;
+    setExpanded(next);
+    const deliveryLat = order.delivery_lat;
+    const deliveryLng = order.delivery_lng;
+    if (next && deliveryLat && !routeInfo && order.status !== 'pending') {
+      if (!navigator.geolocation) {
+        setRouteInfo(false); // no geolocation support
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          fetchRoute(
+            { lat: pos.coords.latitude, lng: pos.coords.longitude },
+            { lat: deliveryLat, lng: deliveryLng }
+          ).then((r) => setRouteInfo(r || false));
+        },
+        () => setRouteInfo(false), // permission denied or error
+        { timeout: 8000, maximumAge: 60000 }
+      );
+    }
+  };
 
   const handleStatus = async (newStatus) => {
     setUpdatingStatus(newStatus);
-    await onUpdateStatus(order._id, newStatus);
+    await onUpdateStatus(order.id, newStatus);
     setUpdatingStatus(null);
   };
 
   const nextStatuses = STATUS_FLOW[order.status] || [];
   const isNew = order.status === 'pending';
-  const isMyOrder = order.vendorId && !isNew;
+  const isMyOrder = order.vendor_id && !isNew;
 
   return (
     <div className="vendor-order-card" style={{ cursor: 'pointer' }}>
       {isNew && <div className="new-order-pulse" />}
 
-      <div onClick={() => setExpanded(!expanded)}>
+      <div onClick={handleExpand}>
         <div className="order-header">
           <div>
             <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-white)', marginBottom: '0.1rem' }}>
-              Order #{order._id?.slice(-8).toUpperCase()}
+              Order #{order.id?.toString().slice(-8).toUpperCase()}
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              {formatDate(order.createdAt)}
+              {formatDate(order.created_at)}
             </div>
           </div>
           <StatusBadge status={order.status} />
@@ -55,10 +80,10 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
           <span>👤</span>
           <div>
             <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {order.userId?.name}
+              {order.user?.name}
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              {order.userId?.phone || order.userId?.email}
+              {order.user?.phone || order.user?.email}
             </div>
           </div>
         </div>
@@ -66,13 +91,13 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
         {/* Address */}
         <div style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.35rem', marginBottom: '0.6rem' }}>
           <span>📍</span>
-          <span style={{ lineHeight: 1.4 }}>{order.deliveryAddress}</span>
+          <span style={{ lineHeight: 1.4 }}>{order.delivery_address}</span>
         </div>
 
-        {/* Jars */}
+        {/* Items */}
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-          {order.jars?.map((jar, i) => (
-            <span key={i} style={{
+          {(order.order_items || []).map((item, i) => (
+            <span key={item.id || i} style={{
               padding: '0.2rem 0.6rem',
               background: 'rgba(0,210,255,0.1)',
               border: '1px solid rgba(0,210,255,0.2)',
@@ -81,7 +106,7 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
               color: 'var(--primary)',
               fontWeight: 600,
             }}>
-              {jar.quantity}× {jar.size}
+              {item.quantity}× {item.product_name} ({item.size})
             </span>
           ))}
         </div>
@@ -96,7 +121,7 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
           }}>
-            {formatCurrency(order.totalAmount)}
+            {formatCurrency(Number(order.total_amount || 0))}
           </span>
           <span style={{
             fontSize: '0.78rem',
@@ -107,7 +132,7 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
             color: 'var(--status-pending)',
             fontWeight: 600,
           }}>
-            {order.paymentMode?.toUpperCase()}
+            {order.payment_mode?.toUpperCase()}
           </span>
         </div>
       </div>
@@ -116,13 +141,13 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
       {expanded && (
         <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-subtle)' }}>
 
-          {/* Jar price breakdown */}
+          {/* Item price breakdown */}
           <div style={{ marginBottom: '1rem' }}>
             <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
               Order Breakdown
             </h4>
-            {order.jars?.map((jar, i) => (
-              <div key={i} style={{
+            {(order.order_items || []).map((item, i) => (
+              <div key={item.id || i} style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 fontSize: '0.85rem',
@@ -130,29 +155,90 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
                 borderBottom: '1px solid var(--border-subtle)',
               }}>
                 <span style={{ color: 'var(--text-secondary)' }}>
-                  {jar.quantity}× {jar.size} jar @ ₹{jar.pricePerUnit}
+                  {item.quantity}× {item.product_name} ({item.size}) @ ₹{item.price_per_unit}
                 </span>
-                <span>₹{jar.subtotal}</span>
+                <span>₹{item.subtotal}</span>
               </div>
             ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', fontWeight: 700, fontSize: '0.95rem' }}>
               <span>Total</span>
-              <span style={{ color: 'var(--accent)' }}>₹{order.totalAmount}</span>
+              <span style={{ color: 'var(--accent)' }}>{formatCurrency(Number(order.total_amount || 0))}</span>
             </div>
           </div>
 
           {/* Map preview */}
-          {order.deliveryLocation && (
+          {order.delivery_lat && (
             <div style={{ marginBottom: '1rem' }}>
               <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
                 Delivery Location
               </h4>
               <DeliveryMap
-                position={order.deliveryLocation}
+                position={{ lat: order.delivery_lat, lng: order.delivery_lng }}
                 readonly
                 height={200}
-                popupText={order.deliveryAddress}
+                popupText={order.delivery_address}
               />
+
+              {/* Distance + Directions bar (for active, non-pending orders) */}
+              {isMyOrder && (
+                <div className="direction-bar" style={{
+                  display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap',
+                  marginTop: '0.6rem', padding: '0.6rem 0.9rem',
+                  background: 'rgba(0,210,255,0.06)',
+                  border: '1px solid rgba(0,210,255,0.18)',
+                  borderRadius: 'var(--radius-md)',
+                }}>
+                  {routeInfo ? (
+                    <>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        📏 <strong style={{ color: 'var(--primary)' }}>{routeInfo.distance} km</strong> away
+                      </span>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        ⏱ <strong style={{ color: 'var(--accent)' }}>{routeInfo.duration} min</strong> ETA
+                      </span>
+                    </>
+                  ) : (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      📍 {routeInfo === false ? 'Location unavailable' : 'Calculating route...'}
+                    </span>
+                  )}
+                  {/* Universal directions link — opens native Maps on iOS/Android */}
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${order.delivery_lat},${order.delivery_lng}&travelmode=driving`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-directions"
+                    style={{ marginLeft: 'auto', fontSize: '0.82rem', padding: '0.45rem 1rem',
+                      background: 'linear-gradient(135deg,#00d2ff,#0047ab)',
+                      color: 'white', borderRadius: 'var(--radius-full)',
+                      fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                      textDecoration: 'none', boxShadow: '0 2px 10px rgba(0,210,255,0.3)',
+                      whiteSpace: 'nowrap',
+                    }}
+                    onClick={(e) => {
+                      // On mobile, try to open native maps first
+                      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                      if (isMobile) {
+                        e.preventDefault();
+                        // Try native geo: URI first (Android), then maps:// (iOS)
+                        const dest = `${order.delivery_lat},${order.delivery_lng}`;
+                        if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                          window.location.href = `maps://maps.apple.com/?daddr=${dest}&dirflg=d`;
+                        } else {
+                          window.location.href = `geo:${dest}?q=${dest}(Delivery+Location)`;
+                        }
+                        // Web fallback after 500ms if native app didn't open
+                        setTimeout(() => {
+                          window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`, '_blank');
+                        }, 800);
+                      }
+                    }}
+                  >
+                    🧭 Get Directions
+                  </a>
+                </div>
+              )}
+
             </div>
           )}
 
@@ -174,25 +260,25 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
             {isNew && (
               <>
                 <button
-                  id={`accept-order-${order._id.slice(-6)}`}
+                  id={`accept-order-${order.id?.toString().slice(-6)}`}
                   className="btn btn-success"
-                  disabled={accepting === order._id}
-                  onClick={() => onAccept(order._id)}
+                  disabled={accepting === order.id}
+                  onClick={() => onAccept(order.id)}
                 >
-                  {accepting === order._id ? (
+                  {accepting === order.id ? (
                     <><span className="spinner spinner-sm" /> Accepting...</>
                   ) : (
                     '✅ Accept Order'
                   )}
                 </button>
                 <button
-                  id={`reject-order-${order._id.slice(-6)}`}
+                  id={`reject-order-${order.id?.toString().slice(-6)}`}
                   className="btn btn-danger"
-                  disabled={accepting === order._id}
+                  disabled={accepting === order.id}
                   onClick={async () => {
                     setUpdatingStatus('rejecting');
                     try {
-                      await api.put(`/orders/${order._id}/reject`);
+                      await api.put(`/orders/${order.id}/reject`);
                       toast.success('Order rejected.');
                     } catch (err) {
                       toast.error(err.response?.data?.message || 'Failed.');
@@ -208,7 +294,7 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
             {isMyOrder && nextStatuses.map((ns) => (
               <button
                 key={ns}
-                id={`status-${ns}-${order._id.slice(-6)}`}
+                id={`status-${ns}-${order.id?.toString().slice(-6)}`}
                 className={ns === 'rejected' ? 'btn btn-danger' : 'btn btn-success'}
                 disabled={!!updatingStatus}
                 onClick={() => handleStatus(ns)}
@@ -257,7 +343,7 @@ const VendorDashboard = () => {
   useEffect(() => {
     const handleNewOrder = (order) => {
       setOrders((prev) => {
-        if (prev.find((o) => o._id === order._id)) return prev;
+        if (prev.find((o) => o.id === order.id)) return prev;
         playNotificationSound();
         toast('🔔 New order received!', {
           icon: '💧',
@@ -270,8 +356,8 @@ const VendorDashboard = () => {
     const handleUnavailable = ({ orderId }) => {
       setOrders((prev) =>
         prev.map((o) =>
-          o._id === orderId && o.status === 'pending'
-            ? { ...o, status: 'accepted', vendorId: { name: 'Another Vendor' } }
+          o.id === orderId && o.status === 'pending'
+            ? { ...o, status: 'accepted', vendor_id: 'another' }
             : o
         )
       );
@@ -291,7 +377,7 @@ const VendorDashboard = () => {
     try {
       const { data } = await api.put(`/orders/${orderId}/accept`);
       if (data.success) {
-        setOrders((prev) => prev.map((o) => (o._id === orderId ? data.order : o)));
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
         toast.success('✅ Order accepted! Get ready for delivery.');
       }
     } catch (err) {
@@ -305,7 +391,7 @@ const VendorDashboard = () => {
     try {
       const { data } = await api.put(`/orders/${orderId}/status`, { status: newStatus });
       if (data.success) {
-        setOrders((prev) => prev.map((o) => (o._id === orderId ? data.order : o)));
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
         toast.success(`Status updated to ${newStatus.replace('_', ' ')}`);
       }
     } catch (err) {
@@ -323,9 +409,9 @@ const VendorDashboard = () => {
     }
   };
 
-  const pendingOrders = orders.filter((o) => o.status === 'pending' && !o.vendorId);
-  const myActiveOrders = orders.filter((o) => o.vendorId?._id === user?.id && ['accepted', 'on_the_way'].includes(o.status));
-  const completedOrders = orders.filter((o) => o.vendorId?._id === user?.id && ['delivered', 'rejected'].includes(o.status));
+  const pendingOrders = orders.filter((o) => o.status === 'pending' && !o.vendor_id);
+  const myActiveOrders = orders.filter((o) => o.vendor_id === user?.id && ['accepted', 'on_the_way'].includes(o.status));
+  const completedOrders = orders.filter((o) => o.vendor_id === user?.id && ['delivered', 'rejected'].includes(o.status));
 
   const tabs = [
     { key: 'new', label: '🔔 New Orders', count: pendingOrders.length, data: pendingOrders },
@@ -393,7 +479,7 @@ const VendorDashboard = () => {
             { label: 'Delivered', value: completedOrders.filter(o => o.status === 'delivered').length, icon: '📦', color: 'var(--status-delivered)' },
             {
               label: 'Revenue',
-              value: formatCurrency(completedOrders.filter(o => o.status === 'delivered').reduce((s, o) => s + o.totalAmount, 0)),
+              value: formatCurrency(completedOrders.filter(o => o.status === 'delivered').reduce((s, o) => s + Number(o.total_amount || 0), 0)),
               icon: '💰',
               color: 'var(--accent)',
             },
@@ -469,7 +555,7 @@ const VendorDashboard = () => {
           <div className="orders-feed">
             {currentTab.data.map((order) => (
               <VendorOrderCard
-                key={order._id}
+                key={order.id}
                 order={order}
                 onAccept={handleAccept}
                 onUpdateStatus={handleUpdateStatus}

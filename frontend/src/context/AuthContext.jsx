@@ -71,25 +71,22 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async ({ name, email, password, phone = '', address = '', role = 'user' }) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name, role, phone, address },
-      },
-    });
-    if (error) throw error;
-
-    // Insert profile/vendor row via backend
-    const endpoint = role === 'vendor' ? '/vendors/register' : '/users/register';
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const endpoint = role === 'vendor' ? '/vendors/register' : '/users/register';
 
-    // Backend handles profile creation via admin SDK
-    await fetch(`${API_URL}${endpoint}`, {
+    // Backend creates user via admin SDK (auto-confirmed, no email needed)
+    const res = await fetch(`${API_URL}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password, phone, address }),
     });
+
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+
+    // Establish client-side Supabase session
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
 
     return data;
   };

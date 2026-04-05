@@ -126,10 +126,10 @@ const OrderHistory = () => {
         ) : (
           filtered.map((order) => (
             <OrderCard
-              key={order._id}
+              key={order.id}
               order={order}
-              expanded={expandedId === order._id}
-              onToggle={() => setExpandedId(expandedId === order._id ? null : order._id)}
+              expanded={expandedId === order.id}
+              onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
             >
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
@@ -142,29 +142,29 @@ const OrderHistory = () => {
                   <h4 style={{ fontSize: '0.82rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.75rem', letterSpacing: '0.04em' }}>
                     Jar Breakdown
                   </h4>
-                  {order.jars?.map((jar, i) => (
-                    <div key={i} style={{
+                  {(order.order_items || []).map((item, i) => (
+                    <div key={item.id || i} style={{
                       display: 'flex',
                       justifyContent: 'space-between',
                       padding: '0.35rem 0',
                       fontSize: '0.85rem',
                       borderBottom: '1px solid var(--border-subtle)',
                     }}>
-                      <span>{jar.quantity}× {jar.size} jar</span>
-                      <span style={{ color: 'var(--primary)' }}>₹{jar.subtotal}</span>
+                      <span>{item.quantity}× {item.product_name} ({item.size})</span>
+                      <span style={{ color: 'var(--primary)' }}>₹{item.subtotal}</span>
                     </div>
                   ))}
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', fontWeight: 700 }}>
                     <span>Total</span>
-                    <span style={{ color: 'var(--accent)' }}>₹{order.totalAmount}</span>
+                    <span style={{ color: 'var(--accent)' }}>₹{Number(order.total_amount || 0).toFixed(2)}</span>
                   </div>
 
-                  {order.vendorId && (
+                  {order.vendor && (
                     <div className="vendor-info-card" style={{ marginTop: '0.5rem' }}>
                       <div className="vendor-avatar">🏪</div>
                       <div className="vendor-info-details">
-                        <h4>{order.vendorId.name}</h4>
-                        <p>📞 {order.vendorId.phone}</p>
+                        <h4>{order.vendor.name}</h4>
+                        <p>📞 {order.vendor.phone}</p>
                       </div>
                     </div>
                   )}
@@ -176,10 +176,10 @@ const OrderHistory = () => {
                   Delivery Location
                 </h4>
                 <DeliveryMap
-                  position={order.deliveryLocation}
+                  position={order.delivery_lat ? { lat: order.delivery_lat, lng: order.delivery_lng } : null}
                   readonly
                   height={150}
-                  popupText={order.deliveryAddress}
+                  popupText={order.delivery_address}
                 />
               </div>
             </OrderCard>

@@ -1,247 +1,142 @@
-# SmartAqua 💧 — Water Jar Delivery Platform
+# SmartAqua 💧 — Water Jar Delivery Platform (V2)
 
-A production-ready, full-stack water jar delivery application built with the MERN stack (MongoDB, Express, React, Node.js), featuring real-time order tracking via Socket.IO and map integration via Leaflet.
+A production-ready, full-stack water jar delivery application built with the MERN-adjacent stack (Supabase + Express + React + Node.js), featuring real-time order tracking via Socket.IO, OSRM-powered delivery maps, Razorpay payments, and Gemini AI demand insights.
 
 ---
 
 ## 🚀 Tech Stack
 
-| Layer     | Technology                              |
-|-----------|----------------------------------------|
-| Frontend  | React 18 + Vite, React Router, Leaflet, Socket.IO Client |
-| Backend   | Node.js, Express.js, Socket.IO         |
-| Database  | MongoDB + Mongoose                      |
-| Auth      | JWT (7-day tokens, localStorage)       |
-| Maps      | React-Leaflet (OpenStreetMap)          |
-| Styling   | Vanilla CSS (Aqua-Material Design)     |
-| Toasts    | React Hot Toast                        |
-
----
-
-## 📁 Project Structure
-
-```
-SmartWater/
-├── backend/
-│   ├── middleware/
-│   │   └── auth.js              # JWT + role middleware
-│   ├── models/
-│   │   ├── User.js
-│   │   ├── Vendor.js
-│   │   └── Order.js
-│   ├── routes/
-│   │   ├── users.js
-│   │   ├── vendors.js
-│   │   └── orders.js
-│   ├── socket/
-│   │   └── socketManager.js     # Socket.IO event manager
-│   ├── server.js
-│   ├── .env
-│   └── package.json
-└── frontend/
-    ├── src/
-    │   ├── components/
-    │   │   ├── Navbar.jsx
-    │   │   ├── DeliveryMap.jsx   # Leaflet map
-    │   │   ├── OrderCard.jsx
-    │   │   ├── OrderTimeline.jsx
-    │   │   └── LoadingScreen.jsx
-    │   ├── context/
-    │   │   ├── AuthContext.jsx   # JWT + persistent login
-    │   │   └── SocketContext.jsx # Socket.IO client
-    │   ├── pages/
-    │   │   ├── LandingPage.jsx
-    │   │   ├── auth/
-    │   │   │   ├── UserAuth.jsx
-    │   │   │   └── VendorAuth.jsx
-    │   │   ├── user/
-    │   │   │   ├── UserDashboard.jsx
-    │   │   │   ├── PlaceOrder.jsx
-    │   │   │   └── OrderHistory.jsx
-    │   │   └── vendor/
-    │   │       └── VendorDashboard.jsx
-    │   ├── utils/
-    │   │   ├── api.js            # Axios + interceptors
-    │   │   └── helpers.js        # Constants + formatters
-    │   ├── App.jsx
-    │   ├── main.jsx
-    │   └── index.css             # Complete design system
-    ├── index.html
-    ├── vite.config.js
-    ├── .env
-    └── package.json
-```
+| Layer       | Technology                                                          |
+|-------------|---------------------------------------------------------------------|
+| Frontend    | React 18 + Vite, React Router v6, React-Leaflet (Leaflet.js)       |
+| Backend     | Node.js, Express.js, Socket.IO                                      |
+| Database    | Supabase (PostgreSQL)                                               |
+| Auth        | Supabase Auth (JWT)                                                 |
+| Maps        | React-Leaflet + OSRM (free routing, no API key needed)             |
+| Payments    | Razorpay (test mode)                                                |
+| AI          | Google Gemini 1.5 Flash (demand predictions)                        |
+| Charts      | Chart.js + react-chartjs-2                                          |
+| Realtime    | Socket.IO (order notifications)                                     |
+| Styling     | Vanilla CSS (Aqua-Material Glassmorphism Design)                    |
+| Toasts      | React Hot Toast                                                     |
+| Deploy      | Render (backend) + Vercel (frontend)                                |
 
 ---
 
 ## ⚙️ Prerequisites
 
 - Node.js >= 18
-- MongoDB (local or Atlas)
+- A [Supabase](https://supabase.com) project
 - npm
 
 ---
 
-## 🛠️ Setup and Run
+## 🛠️ Local Setup
 
-### 1. Start MongoDB
+### 1. Clone & Install
 
-Make sure MongoDB is running locally:
 ```bash
-mongod
-```
-Or update `MONGO_URI` in `backend/.env` to use MongoDB Atlas.
-
-### 2. Install Backend Dependencies
-```bash
+# Backend
 cd backend
 npm install
-```
 
-### 3. Install Frontend Dependencies
-```bash
-cd frontend
+# Frontend
+cd ../frontend
 npm install
 ```
 
-### 4. Configure Environment Variables
+### 2. Configure Environment Variables
 
-**backend/.env** (already created):
-```
+**backend/.env**
+```env
 PORT=5000
-MONGO_URI=mongodb://localhost:27017/smartaqua
-JWT_SECRET=smartaqua_super_secret_jwt_key_2024
-CLIENT_URL=http://localhost:5173
 NODE_ENV=development
+CLIENT_URL=http://localhost:5173
+
+# Supabase — https://supabase.com/dashboard → Settings → API
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_KEY=your_service_role_key
+
+# Razorpay — https://dashboard.razorpay.com → API Keys
+RAZORPAY_KEY_ID=rzp_test_YOUR_KEY_ID
+RAZORPAY_KEY_SECRET=your_razorpay_secret
+
+# Gemini AI — https://aistudio.google.com/app/apikey
+GEMINI_API_KEY=your_gemini_api_key
 ```
 
-**frontend/.env** (already created):
-```
+**frontend/.env**
+```env
 VITE_API_URL=http://localhost:5000/api
 VITE_SOCKET_URL=http://localhost:5000
+VITE_RAZORPAY_KEY_ID=rzp_test_YOUR_KEY_ID
 ```
 
-### 5. Run the Backend
+### 3. Run
+
 ```bash
+# Terminal 1 — Backend
 cd backend
-npm run dev
-```
-Server starts at: http://localhost:5000
+npm run dev     # http://localhost:5000
 
-### 6. Run the Frontend
-```bash
+# Terminal 2 — Frontend
 cd frontend
-npm run dev
+npm run dev     # http://localhost:5173
 ```
-App available at: http://localhost:5173
 
 ---
 
-## 🌐 API Reference
+## 🌍 Production Deployment
 
-### Auth
-| Method | Endpoint                  | Access  |
-|--------|---------------------------|---------|
-| POST   | /api/users/register       | Public  |
-| POST   | /api/users/login          | Public  |
-| GET    | /api/users/me             | User    |
-| POST   | /api/vendors/register     | Public  |
-| POST   | /api/vendors/login        | Public  |
-| GET    | /api/vendors/me           | Vendor  |
-| PUT    | /api/vendors/availability | Vendor  |
+### Backend → Render
 
-### Orders
-| Method | Endpoint                  | Access  |
-|--------|---------------------------|---------|
-| POST   | /api/orders               | User    |
-| GET    | /api/orders/user          | User    |
-| GET    | /api/orders/vendor        | Vendor  |
-| PUT    | /api/orders/:id/accept    | Vendor  |
-| PUT    | /api/orders/:id/status    | Vendor  |
-| PUT    | /api/orders/:id/reject    | Vendor  |
+1. Push your code to GitHub.
+2. Go to [render.com](https://render.com) → **New Web Service**.
+3. Connect your repo and set **Root Directory** to `backend`.
+4. Render will auto-detect `render.yaml` and use:
+   - **Build command**: `npm install`
+   - **Start command**: `node server.js`
+5. Add environment variables in the Render dashboard:
+   | Key | Value |
+   |-----|-------|
+   | `NODE_ENV` | `production` |
+   | `CLIENT_URL` | `https://your-app.vercel.app` |
+   | `SUPABASE_URL` | your Supabase URL |
+   | `SUPABASE_ANON_KEY` | your anon key |
+   | `SUPABASE_SERVICE_KEY` | your service role key |
+   | `RAZORPAY_KEY_ID` | your Razorpay key |
+   | `RAZORPAY_KEY_SECRET` | your Razorpay secret |
+   | `GEMINI_API_KEY` | your Gemini key |
+6. Deploy. Note your Render URL (e.g. `https://smartaqua-backend.onrender.com`).
 
-### Health
-| Method | Endpoint | Access  |
-|--------|----------|---------|
-| GET    | /health  | Public  |
+### Frontend → Vercel
 
----
-
-## 💧 Jar Pricing
-
-| Jar Size | Price   |
-|----------|---------|
-| 1L       | ₹10     |
-| 2L       | ₹18     |
-| 10L      | ₹60     |
-| 20L      | ₹100    |
-
----
-
-## ⚡ Real-time Socket Events
-
-| Event               | Direction            | Description                    |
-|---------------------|----------------------|--------------------------------|
-| user:register       | Client → Server      | Register user's socket ID       |
-| vendor:register     | Client → Server      | Register vendor's socket ID     |
-| newOrder            | Server → Vendors     | New order broadcast to vendors  |
-| orderAccepted       | Server → User        | Notify user their order was accepted |
-| orderStatusUpdate   | Server → User        | Push status changes to user     |
-| orderUnavailable    | Server → Vendors     | Remove taken order from feed    |
-
----
-
-## 📱 Features
-
-### Customer
-- Register / Login
-- Place orders with GPS + map click location
-- Select 1L, 2L, 10L, 20L jars with quantity
-- Auto price calculation
-- Cash on delivery / Online (placeholder)
-- Real-time order tracking
-- Vendor info revealed after acceptance
-- Order history with filters
-- Status timeline UI
-
-### Vendor
-- Register / Login
-- Real-time new order feed (Socket.IO)
-- Accept / Reject pending orders
-- Status flow: accepted → on_the_way → delivered
-- Map preview of delivery location
-- Revenue stats
-- Availability toggle
-- Multi-vendor prevention (first-accept-wins)
+1. Go to [vercel.com](https://vercel.com) → **New Project** → import your repo.
+2. Set **Root Directory** to `frontend`.
+3. Add environment variables:
+   | Key | Value |
+   |-----|-------|
+   | `VITE_API_URL` | `https://smartaqua-backend.onrender.com/api` |
+   | `VITE_SOCKET_URL` | `https://smartaqua-backend.onrender.com` |
+   | `VITE_RAZORPAY_KEY_ID` | your Razorpay test key |
+4. Deploy. Vercel reads `vercel.json` for SPA routing rewrites automatically.
+5. Copy your Vercel URL and update `CLIENT_URL` in Render environment variables.
 
 ---
 
 ## 🔒 Security
 
-- Passwords hashed with bcryptjs (12 rounds)
-- JWT tokens with 7-day expiry
+- Supabase Row Level Security (RLS)
+- JWT tokens via Supabase Auth
 - Role-based middleware (`userOnly`, `vendorOnly`)
-- Order ownership validation before status update
+- Razorpay HMAC signature verification
 - 401 auto-logout on expired token
 
 ---
 
-## 🐛 Troubleshooting
-
-**MongoDB connection error:**
-→ Make sure `mongod` is running or update `MONGO_URI` to Atlas
-
-**Port conflict:**
-→ Change PORT in `backend/.env` and update `VITE_API_URL` in `frontend/.env`
-
-**Map not loading:**
-→ Check internet connection (uses OpenStreetMap tiles)
-
-**GPS not working:**
-→ Must be on HTTPS or localhost; browser will block GPS on HTTP in production
-
----
 
 ## 📄 License
 
 MIT — Free to use and modify.
+

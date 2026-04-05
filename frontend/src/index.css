@@ -1725,16 +1725,288 @@ a:hover { color: var(--primary-light); }
   to { stroke-dashoffset: -20; }
 }
 
-/* ── Responsive tweaks for new components ── */
-@media (max-width: 768px) {
-  .product-grid {
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE DESIGN — Laptop (≤1024px), Tablet (≤768px), Mobile (≤480px)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Laptop / Small Desktop ── */
+@media (max-width: 1024px) {
+  .dashboard-content {
+    padding: 1.5rem 1.25rem;
+  }
+
+  .hero {
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  .hero-title {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+  }
+
+  .features-grid,
+  .how-it-works-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .insights-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ── Tablet ── */
+@media (max-width: 768px) {
+  /* Layout */
+  .dashboard-content {
+    padding: 1.25rem 1rem;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Navbar */
+  .navbar {
+    padding: 0 1rem;
+  }
+
+  .navbar-inner {
+    height: 56px;
+  }
+
+  .navbar-brand {
+    font-size: 1.1rem;
+  }
+
+  .navbar-user {
+    display: none;
+  }
+
+  /* Hero */
+  .hero {
+    padding: 3rem 1rem 2.5rem;
+  }
+
+  .hero-title {
+    font-size: clamp(1.8rem, 6vw, 2.8rem);
+  }
+
+  .hero-subtitle {
+    font-size: 1rem;
+  }
+
+  .stats-row {
+    gap: 1rem;
+  }
+
+  .stat-value {
+    font-size: 1.4rem;
+  }
+
+  /* Cards */
+  .auth-card {
+    padding: 1.75rem 1.5rem;
+  }
+
+  /* Grids */
+  .features-grid,
+  .how-it-works-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
   .insights-grid {
     grid-template-columns: 1fr;
   }
+
+  /* Map overlay */
   .map-overlay-glass {
     flex-wrap: wrap;
     gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    bottom: 6px;
+    left: 6px;
+    right: 6px;
   }
+
+  /* Category tabs */
+  .category-tabs {
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .category-tabs::-webkit-scrollbar { display: none; }
+
+  .category-tab {
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.8rem;
+  }
+
+  /* Order card grid inside expanded */
+  .order-card-inner-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Vendor dashboard stat cards */
+  .vendor-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Section title */
+  .section-title {
+    font-size: 1rem;
+  }
+
+  /* Buttons */
+  .btn-lg {
+    padding: 0.875rem 1.5rem;
+    font-size: 0.95rem;
+  }
+
+  /* Empty state */
+  .empty-state {
+    padding: 3rem 1.5rem;
+  }
+
+  .category-tab { flex-shrink: 0; }
+
+  /* Order cards expanded: unstack the 2-col grid */
+  .order-expanded-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Map: shorter height on mobile */
+  .map-container-order { height: 160px !important; }
+
+  /* Vendor order actions: full-width buttons */
+  .vendor-order-actions {
+    flex-direction: column;
+    gap: 0.5rem !important;
+  }
+  .vendor-order-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Price summary row: tighter */
+  .price-summary { padding: 0.875rem; }
+
+  /* Bottom safe area for iOS */
+  .dashboard-content {
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* ── Small Mobile (≤480px) extra fixes ── */
+@media (max-width: 480px) {
+
+  /* Navbar: compact */
+  .navbar { padding: 0 0.75rem; }
+  .navbar-inner { height: 52px; }
+  .navbar-brand { font-size: 1rem; }
+
+  /* Hide connection dot label, keep dot */
+  .navbar-connection-label { display: none; }
+
+  /* Auth page: no padding top/bottom to use full viewport */
+  .auth-page { padding: 0.75rem; align-items: flex-start; padding-top: 2rem; }
+  .auth-card { padding: 1.5rem 1rem; }
+
+  /* Vendor dashboard: single-col stat cards */
+  .stats-grid-4 { grid-template-columns: repeat(2, 1fr) !important; gap: 0.6rem !important; }
+
+  /* Tab bar text: shorter on very small screens */
+  .vendor-tab-label { font-size: 0.72rem; }
+
+  /* Vendor order card header: wrap if needed */
+  .order-header { flex-wrap: wrap; gap: 0.35rem; }
+
+  /* Directions button: always full width on mobile */
+  .btn-directions {
+    display: block !important;
+    width: 100% !important;
+    text-align: center !important;
+    margin-top: 0.4rem !important;
+    padding: 0.55rem 1rem !important;
+    font-size: 0.82rem !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  /* Item tags: wrap properly */
+  .order-jars { flex-wrap: wrap; gap: 0.3rem; }
+  .jar-tag { font-size: 0.72rem; padding: 0.18rem 0.5rem; }
+
+  /* Remove hover lift on cards (mobile has no hover) */
+  .card:hover { transform: none; }
+  .vendor-order-card:hover { transform: none; }
+
+  /* Product card: no hover lift */
+  .product-card:hover { transform: none; }
+
+  /* Bigger tap targets for qty buttons */
+  .qty-btn {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 1rem !important;
+  }
+
+  /* Payment option cards: full width */
+  .payment-option { padding: 0.75rem; }
+
+  /* Landing page pricing grid: 2x2 */
+  .jar-pricing-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Hero CTA buttons: stack vertically */
+  .hero-cta { flex-direction: column; align-items: center; }
+  .hero-cta .btn { width: 100%; max-width: 280px; justify-content: center; }
+
+  /* Empty state */
+  .empty-state { padding: 2rem 0.75rem; }
+
+  /* Insights charts: 200px tall */
+  .chart-card > div { height: 180px !important; }
+}
+
+/* ── Very Small Phones (≤360px) ── */
+@media (max-width: 360px) {
+  .navbar-brand { font-size: 0.9rem; }
+  .product-grid { grid-template-columns: repeat(2, 1fr); gap: 0.4rem; }
+  .product-card { padding: 0.65rem 0.5rem; }
+  .dashboard-content { padding: 0.75rem 0.5rem; }
+  .auth-card { padding: 1.25rem 0.875rem; }
+  .stats-grid-4 { grid-template-columns: 1fr 1fr !important; gap: 0.4rem !important; }
+  .btn-lg { padding: 0.75rem 1rem; font-size: 0.88rem; }
+  .hero-title { font-size: 1.5rem; }
+}
+
+/* ── Touch device: disable hover transforms ── */
+@media (hover: none) and (pointer: coarse) {
+  .card:hover { transform: none; box-shadow: none; }
+  .btn:hover { transform: none; }
+  .btn-primary:hover { transform: none; }
+  .btn-success:hover { transform: none; }
+  .btn-danger:hover { transform: none; }
+  .product-card:hover { transform: none; box-shadow: none; }
+  .vendor-order-card:hover { transform: none; }
+  .order-card:hover { transform: none; }
+
+  /* Bigger tap targets globally */
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 36px; }
+  .form-input, .form-select { min-height: 46px; font-size: 16px; } /* prevent iOS zoom */
+  .qty-btn { min-width: 36px; min-height: 36px; }
+  .auth-tab { min-height: 40px; }
 }

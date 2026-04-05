@@ -15,8 +15,9 @@ const OrderTimeline = ({ order }) => {
   };
 
   const getHistoryTime = (stepStatus) => {
-    const entry = order.statusHistory?.find((h) => h.status === stepStatus);
-    return entry ? formatTime(entry.timestamp) : null;
+    const history = order.order_status_history || order.statusHistory || [];
+    const entry = history.find((h) => h.status === stepStatus);
+    return entry ? formatTime(entry.created_at || entry.timestamp) : null;
   };
 
   const steps = [

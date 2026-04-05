@@ -17,7 +17,7 @@ const UserAuth = () => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const { loginWithEmail, register, registerUser } = useAuth(); // ← fix this line too
+  const { loginWithEmail, register } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,13 +28,13 @@ const UserAuth = () => {
         await loginWithEmail({
           email: form.email,
           password: form.password,
-          role: 'user', // or 'vendor' depending on your page
+          role: 'user',
         });
         toast.success(`Welcome back! 👋`);
         navigate('/user');
 
       } else {
-        await registerUser({
+        await register({
           name: form.name,
           email: form.email,
           password: form.password,
