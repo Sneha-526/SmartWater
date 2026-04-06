@@ -9,7 +9,6 @@ import UserDashboard from './pages/user/UserDashboard';
 import PlaceOrder from './pages/user/PlaceOrder';
 import OrderHistory from './pages/user/OrderHistory';
 import VendorDashboard from './pages/vendor/VendorDashboard';
-import DemandInsights from './pages/user/DemandInsights';
 import LoadingScreen from './components/LoadingScreen';
 
 const ProtectedRoute = ({ children, role }) => {
@@ -69,14 +68,8 @@ const App = () => {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/user/insights"
-        element={
-          <ProtectedRoute role="user">
-            <DemandInsights />
-          </ProtectedRoute>
-        }
-      />
+      {/* Redirect old AI insights URL to user dashboard */}
+      <Route path="/user/insights" element={<Navigate to="/user" replace />} />
       <Route
         path="/vendor"
         element={
@@ -91,3 +84,4 @@ const App = () => {
 };
 
 export default App;
+

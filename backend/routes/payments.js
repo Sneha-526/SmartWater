@@ -13,6 +13,10 @@ const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
 // POST /api/payments/create-order — Create Razorpay order
 router.post('/create-order', protect, userOnly, async (req, res) => {
   try {
+    if (!razorpay) {
+      return res.status(503).json({ success: false, message: 'Payment gateway not configured. Please use Cash on Delivery.' });
+    }
+
     const { orderId, amount } = req.body;
 
     if (!orderId || !amount)

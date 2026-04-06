@@ -11,6 +11,7 @@ export const STATUS_CONFIG = {
   on_the_way: { label: 'On The Way', color: '#8b5cf6', icon: '🚚', class: 'badge-on_the_way' },
   delivered: { label: 'Delivered', color: '#10b981', icon: '📦', class: 'badge-delivered' },
   rejected: { label: 'Rejected', color: '#ef4444', icon: '❌', class: 'badge-rejected' },
+  cancelled: { label: 'Cancelled', color: '#6b7280', icon: '🚫', class: 'badge-cancelled' },
 };
 
 export const STATUS_STEPS = ['pending', 'accepted', 'on_the_way', 'delivered'];

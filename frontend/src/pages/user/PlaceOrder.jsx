@@ -30,8 +30,36 @@ const PlaceOrder = () => {
   const [cart, setCart] = useState({});
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [location, setLocation] = useState(null);
+  const [locationName, setLocationName] = useState('');
   const [paymentMode, setPaymentMode] = useState('cod');
   const [notes, setNotes] = useState('');
+
+  // Reverse geocode lat/lng → human-readable place name using Nominatim (free)
+  const reverseGeocode = async (lat, lng) => {
+    setLocationName('Fetching location name...');
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
+      const data = await res.json();
+      if (data && data.display_name) {
+        // Build a short, readable name: neighbourhood/suburb/city
+        const a = data.address || {};
+        const parts = [
+          a.road || a.pedestrian || a.footway,
+          a.neighbourhood || a.suburb || a.quarter,
+          a.city || a.town || a.village || a.county,
+          a.state,
+        ].filter(Boolean);
+        setLocationName(parts.slice(0, 3).join(', ') || data.display_name);
+      } else {
+        setLocationName(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+      }
+    } catch {
+      setLocationName(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+    }
+  };
 
   // Fetch catalog
   useEffect(() => {
@@ -65,6 +93,7 @@ const PlaceOrder = () => {
 
   const handleMapClick = useCallback((lat, lng) => {
     setLocation({ lat, lng });
+    reverseGeocode(lat, lng);
     toast('📍 Location pinned!', { icon: '✅' });
   }, []);
 
@@ -72,7 +101,13 @@ const PlaceOrder = () => {
     if (!navigator.geolocation) return toast.error('Geolocation not supported.');
     setGpsLoading(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => { setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); toast.success('📍 GPS acquired!'); setGpsLoading(false); },
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setLocation({ lat, lng });
+        reverseGeocode(lat, lng);
+        toast.success('📍 GPS acquired!');
+        setGpsLoading(false);
+      },
       () => { toast.error('GPS failed. Click on the map.'); setGpsLoading(false); },
       { timeout: 10000, enableHighAccuracy: true }
     );
@@ -99,28 +134,39 @@ const PlaceOrder = () => {
 
       if (paymentMode === 'online') {
         // Razorpay flow
-        const scriptOk = await loadRazorpayScript();
-        if (!scriptOk) { toast.error('Payment gateway failed to load.'); setLoading(false); return; }
-
         if (!data.order || !data.order.id) {
-  toast.error('Order creation failed.');
-  setLoading(false);
-  return;
-}
-if (!data.order || !data.order.id) {
-  toast.error('Order creation failed. Please try again.');
-  setLoading(false);
-  return;
-}
-const { data: payData } = await api.post('/payments/create-order', {
-  orderId: data.order.id,
-  amount: total,
-});
+          toast.error('Order creation failed. Please try again.');
+          setLoading(false);
+          return;
+        }
+
+        const scriptOk = await loadRazorpayScript();
+        if (!scriptOk) {
+          toast.error('Payment gateway failed to load. Try Cash on Delivery.');
+          setLoading(false);
+          return;
+        }
+
+        let payData;
+        try {
+          const payRes = await api.post('/payments/create-order', {
+            orderId: data.order.id,
+            amount: total,
+          });
+          payData = payRes.data;
+        } catch (payErr) {
+          toast.error(payErr.response?.data?.message || 'Payment initiation failed.');
+          setLoading(false);
+          return;
+        }
+
         if (!user) {
           toast.error('Session expired. Please log in again.');
+          setLoading(false);
           navigate('/');
           return;
         }
+
         openRazorpayCheckout({
           keyId: payData.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
           razorpayOrderId: payData.razorpayOrderId,
@@ -132,7 +178,9 @@ const { data: payData } = await api.post('/payments/create-order', {
             try {
               await api.post('/payments/verify', resp);
               toast.success('🎉 Payment successful! Order placed.');
-            } catch { toast.success('🎉 Order placed! Payment will be verified.'); }
+            } catch {
+              toast.success('🎉 Order placed! Payment will be verified.');
+            }
             navigate('/user');
           },
           onFailure: (msg) => {
@@ -147,7 +195,8 @@ const { data: payData } = await api.post('/payments/create-order', {
       navigate('/user');
     } catch (err) {
       toast.error(err.response?.data?.message || err.message || 'Failed.');
-    } finally { setLoading(false); }
+      setLoading(false);
+    }
   };
 
   return (
@@ -248,8 +297,17 @@ const { data: payData } = await api.post('/payments/create-order', {
                 </button>
                 <DeliveryMap position={location} onMapClick={handleMapClick} height={280} popupText="Delivery Here" />
                 {location ? (
-                  <p style={{ fontSize: '0.8rem', color: 'var(--status-delivered)', marginTop: '0.5rem' }}>
-                    ✅ Location set: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                  <p style={{
+                    fontSize: '0.82rem',
+                    color: locationName === 'Fetching location name...' ? 'var(--text-muted)' : 'var(--status-delivered)',
+                    marginTop: '0.5rem',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '0.35rem',
+                  }}>
+                    {locationName === 'Fetching location name...'
+                      ? <><span className="spinner spinner-sm" style={{ width: '12px', height: '12px', marginTop: '2px', flexShrink: 0 }} /> Fetching location name...</>
+                      : <>📍 <span><strong>Location set:</strong> {locationName}</span></>}
                   </p>
                 ) : <p className="map-hint">🖱️ Click on the map to pin your delivery location</p>}
               </div>

@@ -411,6 +411,35 @@ a:hover { color: var(--primary-light); }
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+.badge-cancelled {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9ca3af;
+  border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+/* ── Directions / Track Button ── */
+.btn-directions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.9rem;
+  background: var(--gradient-primary);
+  color: white;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: var(--transition);
+  box-shadow: 0 2px 10px rgba(0, 210, 255, 0.25);
+}
+
+.btn-directions:hover {
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 210, 255, 0.4);
+}
+
 /* ── Loading Spinner ── */
 .spinner {
   display: inline-block;

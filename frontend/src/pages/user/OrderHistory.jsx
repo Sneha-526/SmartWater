@@ -38,6 +38,7 @@ const OrderHistory = () => {
     { key: 'on_the_way', label: '🚚 On the Way' },
     { key: 'delivered', label: '📦 Delivered' },
     { key: 'rejected', label: '❌ Rejected' },
+    { key: 'cancelled', label: '🚫 Cancelled' },
   ];
 
   if (loading) {

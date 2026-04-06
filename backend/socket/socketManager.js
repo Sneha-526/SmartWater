@@ -38,6 +38,21 @@ const initSocket = (server) => {
       }
     });
 
+    // Vendor sends live location during delivery
+    socket.on('vendor:location', (data) => {
+      // data = { orderId, userId, lat, lng }
+      if (data && data.userId && data.lat && data.lng) {
+        const userSocketId = connectedUsers.get(data.userId);
+        if (userSocketId) {
+          io.to(userSocketId).emit('vendorLocation', {
+            orderId: data.orderId,
+            lat: data.lat,
+            lng: data.lng,
+          });
+        }
+      }
+    });
+
     socket.on('disconnect', () => {
       // Cleanup
       if (socket.userId) {
@@ -84,10 +99,20 @@ const emitOrderStatusUpdate = (userId, order) => {
   }
 };
 
-// Emit order removed from feed (accepted/rejected) to vendors
+// Emit order removed from feed (accepted/rejected/cancelled) to vendors
 const emitOrderUnavailable = (orderId) => {
   if (io) {
     io.to('vendors').emit('orderUnavailable', { orderId });
+  }
+};
+
+// Emit vendor location to a specific user
+const emitVendorLocation = (userId, data) => {
+  if (io) {
+    const socketId = connectedUsers.get(userId);
+    if (socketId) {
+      io.to(socketId).emit('vendorLocation', data);
+    }
   }
 };
 
@@ -99,7 +124,9 @@ module.exports = {
   emitOrderAccepted,
   emitOrderStatusUpdate,
   emitOrderUnavailable,
+  emitVendorLocation,
   getIO,
   connectedUsers,
   connectedVendors,
 };
+

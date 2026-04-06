@@ -18,11 +18,10 @@ export default defineConfig({
     },
   },
   build: {
-    chunkSizeWarningLimit: 1000, // ← increase limit to 1000kb
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks: {
-          // Split vendor libraries into separate chunks
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'supabase': ['@supabase/supabase-js'],
           'maps': ['leaflet', 'react-leaflet'],

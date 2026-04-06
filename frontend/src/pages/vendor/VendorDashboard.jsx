@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -277,17 +277,229 @@ const VendorOrderCard = ({ order, onAccept, onUpdateStatus, accepting }) => {
   );
 };
 
+// ─── AI Insights Panel ───────────────────────────────────────────────────────
+const AIInsightsPanel = () => {
+  const [prediction, setPrediction] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = await api.get('/predict/demand');
+        if (data.success) setPrediction(data.prediction);
+        else setError('Failed to load insights.');
+      } catch (err) {
+        setError(err.response?.data?.message || 'Prediction unavailable.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="card" style={{ padding: '3rem', textAlign: 'center' }}>
+        <div className="spinner spinner-lg" />
+        <p style={{ color: 'var(--text-muted)', marginTop: '1rem' }}>Loading AI insights...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
+        <span style={{ fontSize: '2rem' }}>⚠️</span>
+        <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>{error}</p>
+      </div>
+    );
+  }
+
+  if (!prediction) return null;
+
+  const { summary, peakHours, peakDay, topCategories, topSizes, recommendation, aiInsight, next24HoursDemand } = prediction;
+
+  return (
+    <div style={{ display: 'grid', gap: '1rem' }}>
+      {/* Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
+        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📊</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--primary)' }}>{summary.totalOrdersAnalyzed}</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Orders Analyzed (30d)</div>
+        </div>
+        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>💰</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent)' }}>₹{summary.avgOrderValue}</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Avg Order Value</div>
+        </div>
+        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>{summary.trendPositive ? '📈' : '📉'}</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: summary.trendPositive ? 'var(--status-delivered)' : '#ef4444' }}>{summary.trend}</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Week Trend</div>
+        </div>
+        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📅</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--primary)' }}>{peakDay.day}</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Peak Day ({peakDay.orders} orders)</div>
+        </div>
+      </div>
+
+      {/* Recommendation Badge */}
+      <div className="card" style={{
+        padding: '1rem 1.25rem',
+        background: recommendation.shouldOrderNow
+          ? 'linear-gradient(135deg, rgba(239,68,68,0.12), rgba(245,158,11,0.12))'
+          : 'linear-gradient(135deg, rgba(0,210,255,0.08), rgba(59,130,246,0.08))',
+        border: `1px solid ${recommendation.shouldOrderNow ? 'rgba(239,68,68,0.25)' : 'rgba(0,210,255,0.2)'}`,
+      }}>
+        <div style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+          {recommendation.message}
+        </div>
+        {recommendation.nextPeakHour && (
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            Next peak: <strong style={{ color: 'var(--primary)' }}>{recommendation.nextPeakHour.label}</strong>
+          </div>
+        )}
+      </div>
+
+      {/* Peak Hours */}
+      <div className="card" style={{ padding: '1.25rem' }}>
+        <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '1rem' }}>
+          ⏰ Peak Hours
+        </h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          {peakHours.map((h) => (
+            <div key={h.hour} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 600, minWidth: '55px', color: 'var(--text-secondary)' }}>{h.label}</span>
+              <div style={{ flex: 1, height: '20px', background: 'rgba(0,0,0,0.3)', borderRadius: '10px', overflow: 'hidden' }}>
+                <div style={{
+                  width: `${h.confidence}%`,
+                  height: '100%',
+                  background: 'var(--gradient-primary)',
+                  borderRadius: '10px',
+                  transition: 'width 0.8s ease',
+                }} />
+              </div>
+              <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, minWidth: '38px', textAlign: 'right' }}>{h.confidence}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Top Categories & Sizes */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        <div className="card" style={{ padding: '1.25rem' }}>
+          <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.75rem' }}>
+            📦 Top Categories
+          </h4>
+          {topCategories.map((c) => (
+            <div key={c.category} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.35rem 0', fontSize: '0.85rem', borderBottom: '1px solid var(--border-subtle)' }}>
+              <span style={{ textTransform: 'capitalize', color: 'var(--text-secondary)' }}>{c.category}</span>
+              <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{c.count}</span>
+            </div>
+          ))}
+        </div>
+        <div className="card" style={{ padding: '1.25rem' }}>
+          <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.75rem' }}>
+            📏 Top Sizes
+          </h4>
+          {topSizes.map((s) => (
+            <div key={s.size} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.35rem 0', fontSize: '0.85rem', borderBottom: '1px solid var(--border-subtle)' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>{s.size}</span>
+              <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{s.count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 24-Hour Demand Heatmap */}
+      {next24HoursDemand && next24HoursDemand.length > 0 && (
+        <div className="card" style={{ padding: '1.25rem' }}>
+          <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.75rem' }}>
+            📈 Next 24-Hour Demand Forecast
+          </h4>
+          <div style={{ display: 'flex', gap: '2px', alignItems: 'flex-end', height: '80px' }}>
+            {next24HoursDemand.map((d, i) => (
+              <div key={i} style={{
+                flex: 1,
+                height: `${Math.max(4, d.relativeScore)}%`,
+                background: d.relativeScore > 70
+                  ? 'var(--gradient-primary)'
+                  : d.relativeScore > 40
+                    ? 'rgba(0,210,255,0.4)'
+                    : 'rgba(0,210,255,0.15)',
+                borderRadius: '2px 2px 0 0',
+                transition: 'height 0.5s ease',
+                position: 'relative',
+              }} title={`${d.label}: ${d.relativeScore}%`} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem' }}>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Now</span>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>+12h</span>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>+24h</span>
+          </div>
+        </div>
+      )}
+
+      {/* Gemini AI Insights */}
+      {aiInsight && (
+        <div className="card" style={{
+          padding: '1.25rem',
+          background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(0,210,255,0.06))',
+          border: '1px solid rgba(139,92,246,0.2)',
+        }}>
+          <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '1rem' }}>🤖</span> AI-Powered Insights
+          </h4>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {aiInsight.insights?.map((insight, i) => (
+              <li key={i} style={{
+                padding: '0.5rem 0.75rem',
+                background: 'rgba(0,0,0,0.2)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.85rem',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.5,
+              }}>
+                💡 {insight}
+              </li>
+            ))}
+          </ul>
+          {aiInsight.recommendation && (
+            <div style={{
+              marginTop: '0.75rem',
+              padding: '0.6rem 0.75rem',
+              background: 'rgba(0,210,255,0.08)',
+              border: '1px solid rgba(0,210,255,0.2)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '0.85rem',
+              color: 'var(--primary)',
+              fontWeight: 600,
+            }}>
+              🎯 {aiInsight.recommendation}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 const VendorDashboard = () => {
   const { user } = useAuth();
-  const { on, off } = useSocket();
+  const { on, off, emit } = useSocket();
   const isMobile = useIsMobile();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(null);
   const [isAvailable, setIsAvailable] = useState(true);
   const [activeTab, setActiveTab] = useState('new');
+  const locationWatchRef = useRef(null);
 
   const fetchOrders = async () => {
     try {
@@ -302,6 +514,46 @@ const VendorDashboard = () => {
 
   useEffect(() => { fetchOrders(); }, []);
 
+  // Live location tracking: emit vendor position for on_the_way orders
+  useEffect(() => {
+    const onTheWayOrders = orders.filter(
+      (o) => o.vendor_id && user?.id && o.vendor_id === user.id && o.status === 'on_the_way'
+    );
+
+    if (onTheWayOrders.length > 0 && navigator.geolocation) {
+      // Start watching position
+      if (!locationWatchRef.current) {
+        locationWatchRef.current = navigator.geolocation.watchPosition(
+          (pos) => {
+            onTheWayOrders.forEach((order) => {
+              emit('vendor:location', {
+                orderId: order.id,
+                userId: order.user_id,
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+              });
+            });
+          },
+          () => { /* GPS error, silently ignore */ },
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+        );
+      }
+    } else {
+      // No on_the_way orders, stop watching
+      if (locationWatchRef.current) {
+        navigator.geolocation.clearWatch(locationWatchRef.current);
+        locationWatchRef.current = null;
+      }
+    }
+
+    return () => {
+      if (locationWatchRef.current) {
+        navigator.geolocation.clearWatch(locationWatchRef.current);
+        locationWatchRef.current = null;
+      }
+    };
+  }, [orders, user?.id, emit]);
+
   useEffect(() => {
     const handleNewOrder = (order) => {
       setOrders((prev) => {
@@ -312,14 +564,27 @@ const VendorDashboard = () => {
       });
     };
     const handleUnavailable = ({ orderId }) => {
-      setOrders((prev) => prev.map((o) =>
-        o.id === orderId && o.status === 'pending'
-          ? { ...o, status: 'accepted', vendor_id: 'another' } : o
-      ));
+      setOrders((prev) => prev.filter((o) => {
+        if (o.id === orderId && o.status === 'pending' && !o.vendor_id) return false;
+        return true;
+      }));
+    };
+    const handleStatusUpdate = (order) => {
+      // Handle cancelled orders from customers
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? order : o)));
+      if (order.status === 'cancelled') {
+        playNotificationSound();
+        toast.error('🚫 Customer cancelled an order.');
+      }
     };
     on('newOrder', handleNewOrder);
     on('orderUnavailable', handleUnavailable);
-    return () => { off('newOrder', handleNewOrder); off('orderUnavailable', handleUnavailable); };
+    on('orderStatusUpdate', handleStatusUpdate);
+    return () => {
+      off('newOrder', handleNewOrder);
+      off('orderUnavailable', handleUnavailable);
+      off('orderStatusUpdate', handleStatusUpdate);
+    };
   }, [on, off]);
 
   const handleAccept = async (orderId) => {
@@ -327,8 +592,14 @@ const VendorDashboard = () => {
     try {
       const { data } = await api.put(`/orders/${orderId}/accept`);
       if (data.success) {
-        setOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
+        if (data.order) {
+          setOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
+        } else {
+          // Fallback: re-fetch all orders if server returned null
+          await fetchOrders();
+        }
         toast.success('✅ Order accepted!');
+        setActiveTab('active');
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to accept order.');
@@ -341,7 +612,11 @@ const VendorDashboard = () => {
     try {
       const { data } = await api.put(`/orders/${orderId}/status`, { status: newStatus });
       if (data.success) {
-        setOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
+        if (data.order) {
+          setOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
+        } else {
+          await fetchOrders();
+        }
         toast.success(`Status updated to ${newStatus.replace('_', ' ')}`);
       }
     } catch (err) {
@@ -360,13 +635,14 @@ const VendorDashboard = () => {
   };
 
   const pendingOrders = orders.filter((o) => o.status === 'pending' && !o.vendor_id);
-  const myActiveOrders = orders.filter((o) => o.vendor_id === user?.id && ['accepted', 'on_the_way'].includes(o.status));
-  const completedOrders = orders.filter((o) => o.vendor_id === user?.id && ['delivered', 'rejected'].includes(o.status));
+  const myActiveOrders = orders.filter((o) => o.vendor_id && user?.id && o.vendor_id === user.id && ['accepted', 'on_the_way'].includes(o.status));
+  const completedOrders = orders.filter((o) => o.vendor_id && user?.id && o.vendor_id === user.id && ['delivered', 'rejected', 'cancelled'].includes(o.status));
 
   const tabs = [
     { key: 'new', label: isMobile ? '🔔 New' : '🔔 New Orders', count: pendingOrders.length, data: pendingOrders },
     { key: 'active', label: isMobile ? '🚚 Active' : '🚚 Active', count: myActiveOrders.length, data: myActiveOrders },
     { key: 'done', label: isMobile ? '📦 Done' : '📦 Completed', count: completedOrders.length, data: completedOrders },
+    { key: 'insights', label: isMobile ? '📊 AI' : '📊 AI Insights', count: 0, data: [] },
   ];
 
   const currentTab = tabs.find((t) => t.key === activeTab);
@@ -465,7 +741,7 @@ const VendorDashboard = () => {
               className="btn btn-sm"
               style={{
                 flex: 1,
-                minWidth: isMobile ? '80px' : 'auto',
+                minWidth: isMobile ? '70px' : 'auto',
                 whiteSpace: 'nowrap',
                 background: activeTab === tab.key ? 'var(--gradient-primary)' : 'transparent',
                 color: activeTab === tab.key ? 'white' : 'var(--text-muted)',
@@ -474,7 +750,7 @@ const VendorDashboard = () => {
                 boxShadow: activeTab === tab.key ? '0 2px 12px rgba(0,210,255,0.3)' : 'none',
                 transition: 'var(--transition)',
                 fontSize: isMobile ? '0.78rem' : '0.85rem',
-                padding: isMobile ? '0.4rem 0.6rem' : '0.5rem 1rem',
+                padding: isMobile ? '0.4rem 0.5rem' : '0.5rem 1rem',
               }}
             >
               {tab.label}
@@ -494,32 +770,39 @@ const VendorDashboard = () => {
           ))}
         </div>
 
-        {/* Order Feed */}
-        {currentTab?.data.length === 0 ? (
-          <div className="empty-state card">
-            <span className="empty-icon">{activeTab === 'new' ? '📭' : activeTab === 'active' ? '🚚' : '📦'}</span>
-            <div className="empty-title">
-              {activeTab === 'new' ? 'No new orders' : activeTab === 'active' ? 'No active deliveries' : 'No completed orders'}
-            </div>
-            <div className="empty-desc">
-              {activeTab === 'new'
-                ? isAvailable ? 'New orders will appear here in real-time' : 'Turn on availability to receive orders'
-                : activeTab === 'active' ? 'Accept orders to start delivering'
-                  : 'Completed orders will show here'}
-            </div>
-          </div>
+        {/* AI Insights Tab Content */}
+        {activeTab === 'insights' ? (
+          <AIInsightsPanel />
         ) : (
-          <div className="orders-feed">
-            {currentTab.data.map((order) => (
-              <VendorOrderCard
-                key={order.id}
-                order={order}
-                onAccept={handleAccept}
-                onUpdateStatus={handleUpdateStatus}
-                accepting={accepting}
-              />
-            ))}
-          </div>
+          <>
+            {/* Order Feed */}
+            {currentTab?.data.length === 0 ? (
+              <div className="empty-state card">
+                <span className="empty-icon">{activeTab === 'new' ? '📭' : activeTab === 'active' ? '🚚' : '📦'}</span>
+                <div className="empty-title">
+                  {activeTab === 'new' ? 'No new orders' : activeTab === 'active' ? 'No active deliveries' : 'No completed orders'}
+                </div>
+                <div className="empty-desc">
+                  {activeTab === 'new'
+                    ? isAvailable ? 'New orders will appear here in real-time' : 'Turn on availability to receive orders'
+                    : activeTab === 'active' ? 'Accept orders to start delivering'
+                      : 'Completed orders will show here'}
+                </div>
+              </div>
+            ) : (
+              <div className="orders-feed">
+                {currentTab.data.map((order) => (
+                  <VendorOrderCard
+                    key={order.id}
+                    order={order}
+                    onAccept={handleAccept}
+                    onUpdateStatus={handleUpdateStatus}
+                    accepting={accepting}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

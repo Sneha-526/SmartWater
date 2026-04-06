@@ -171,9 +171,14 @@ router.put('/:id/accept', protect, vendorOnly, async (req, res) => {
     await supabaseAdmin.rpc('increment_vendor_orders', { vendor_id_param: req.user.id }).catch(() => { });
 
     const fullOrder = await getFullOrder(req.params.id);
-    if (!fullOrder) throw new Error('Failed to retrieve created order.');
-    emitNewOrder(fullOrder);
-    res.status(201).json({ success: true, message: 'Order placed successfully.', order: fullOrder });
+    if (!fullOrder) throw new Error('Failed to retrieve accepted order.');
+
+    // Notify the customer that their order was accepted
+    emitOrderAccepted(existing.user_id, fullOrder);
+    // Tell other vendors this order is no longer available
+    emitOrderUnavailable(req.params.id);
+
+    res.json({ success: true, message: 'Order accepted successfully.', order: fullOrder });
 
   } catch (err) {
     console.error('[Orders] Accept error:', err.message);
@@ -252,17 +257,69 @@ router.put('/:id/reject', protect, vendorOnly, async (req, res) => {
   }
 });
 
+// PUT /api/orders/:id/cancel — User cancels order (pending or accepted only)
+router.put('/:id/cancel', protect, userOnly, async (req, res) => {
+  try {
+    const { data: order } = await supabaseAdmin
+      .from('orders')
+      .select('id, status, user_id, vendor_id')
+      .eq('id', req.params.id)
+      .single();
+
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found.' });
+    if (order.user_id !== req.user.id)
+      return res.status(403).json({ success: false, message: 'Not your order.' });
+    if (!['pending', 'accepted'].includes(order.status))
+      return res.status(409).json({ success: false, message: 'Order can only be cancelled before it is on the way.' });
+
+    await supabaseAdmin.from('orders').update({ status: 'cancelled' }).eq('id', req.params.id);
+    await supabaseAdmin.from('order_status_history').insert({
+      order_id: req.params.id,
+      status: 'cancelled',
+      note: 'Cancelled by customer',
+    });
+
+    const fullOrder = await getFullOrder(req.params.id);
+
+    // Notify vendor if order was already accepted
+    if (order.vendor_id) {
+      emitOrderStatusUpdate(order.vendor_id, fullOrder);
+    }
+    // Remove from vendor feeds
+    emitOrderUnavailable(req.params.id);
+
+    res.json({ success: true, message: 'Order cancelled successfully.', order: fullOrder });
+  } catch (err) {
+    console.error('[Orders] Cancel error:', err.message);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
 // ── Helper: Fetch full order with all relations ──────────────
 async function getFullOrder(orderId) {
-  const { data: order } = await supabaseAdmin
+  const { data: order, error } = await supabaseAdmin
     .from('orders')
-    .select(`*, order_items(*), order_status_history(*),
-      user:user_id(id, name, phone, email)`)
+    .select(`*, order_items(*), order_status_history(*)`)
     .eq('id', orderId)
     .single();
 
-  if (!order) return null;
+  if (error || !order) {
+    console.error('[Orders] getFullOrder failed:', error?.message || 'not found');
+    return null;
+  }
 
+  // Fetch user from profiles table separately (FK join is unreliable)
+  let user = null;
+  if (order.user_id) {
+    const { data } = await supabaseAdmin
+      .from('profiles')
+      .select('id, name, phone, email')
+      .eq('id', order.user_id)
+      .single();
+    user = data;
+  }
+
+  // Fetch vendor separately
   let vendor = null;
   if (order.vendor_id) {
     const { data } = await supabaseAdmin
@@ -273,7 +330,7 @@ async function getFullOrder(orderId) {
     vendor = data;
   }
 
-  return { ...order, vendor };
+  return { ...order, user, vendor };
 }
 
 module.exports = router;

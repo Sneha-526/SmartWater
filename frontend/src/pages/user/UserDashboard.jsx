@@ -16,6 +16,8 @@ const UserDashboard = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
+  const [cancellingId, setCancellingId] = useState(null);
+  const [vendorLocations, setVendorLocations] = useState({}); // { orderId: { lat, lng } }
 
   const fetchOrders = async () => {
     try {
@@ -46,27 +48,57 @@ const UserDashboard = () => {
         on_the_way: '🚚 Your order is on the way!',
         delivered: '📦 Order delivered! Enjoy your water.',
         rejected: '❌ Your order was rejected.',
+        cancelled: '🚫 Your order was cancelled.',
       };
       const msg = msgs[order.status];
       if (msg) {
         playNotificationSound();
         if (order.status === 'delivered') toast.success(msg);
-        else if (order.status === 'rejected') toast.error(msg);
+        else if (order.status === 'rejected' || order.status === 'cancelled') toast.error(msg);
         else toast(msg, { icon: '🔔' });
+      }
+    };
+
+    // Live vendor location tracking
+    const handleVendorLocation = (data) => {
+      // data = { orderId, lat, lng }
+      if (data && data.orderId && data.lat && data.lng) {
+        setVendorLocations((prev) => ({
+          ...prev,
+          [data.orderId]: { lat: data.lat, lng: data.lng },
+        }));
       }
     };
 
     on('orderAccepted', handleAccepted);
     on('orderStatusUpdate', handleStatusUpdate);
+    on('vendorLocation', handleVendorLocation);
 
     return () => {
       off('orderAccepted', handleAccepted);
       off('orderStatusUpdate', handleStatusUpdate);
+      off('vendorLocation', handleVendorLocation);
     };
   }, [on, off]);
 
-  const activeOrders = orders.filter((o) => !['delivered', 'rejected'].includes(o.status));
-  const pastOrders = orders.filter((o) => ['delivered', 'rejected'].includes(o.status));
+  const handleCancelOrder = async (orderId) => {
+    if (!window.confirm('Are you sure you want to cancel this order?')) return;
+    setCancellingId(orderId);
+    try {
+      const { data } = await api.put(`/orders/${orderId}/cancel`);
+      if (data.success) {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
+        toast.success('Order cancelled successfully.');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to cancel order.');
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  const activeOrders = orders.filter((o) => !['delivered', 'rejected', 'cancelled'].includes(o.status));
+  const pastOrders = orders.filter((o) => ['delivered', 'rejected', 'cancelled'].includes(o.status));
 
   if (loading) {
     return (
@@ -107,9 +139,6 @@ const UserDashboard = () => {
               </Link>
               <Link to="/user/history" className="btn btn-secondary" id="order-history-btn">
                 📋 History
-              </Link>
-              <Link to="/user/insights" className="btn btn-ghost" id="demand-insights-btn">
-                🤖 AI Insights
               </Link>
             </div>
           </div>
@@ -232,18 +261,133 @@ const UserDashboard = () => {
                   </div>
                 </div>
 
-                {/* Mini map */}
+                {/* Delivery Map — show live vendor location for on_the_way orders */}
                 <div style={{ marginTop: '1rem' }}>
                   <h4 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Delivery Location
+                    {order.status === 'on_the_way' ? '🚚 Live Delivery Tracking' : 'Delivery Location'}
                   </h4>
                   <DeliveryMap
                     position={order.delivery_lat ? { lat: order.delivery_lat, lng: order.delivery_lng } : null}
+                    vendorPosition={
+                      order.status === 'on_the_way' && vendorLocations[order.id]
+                        ? vendorLocations[order.id]
+                        : order.vendor && order.status === 'on_the_way'
+                          ? { lat: order.vendor.lat, lng: order.vendor.lng }
+                          : null
+                    }
                     readonly
-                    height={160}
+                    height={order.status === 'on_the_way' ? 240 : 160}
                     popupText={order.delivery_address}
+                    showRoute={order.status === 'on_the_way'}
+                    orderStatus={order.status}
                   />
+                  {order.status === 'on_the_way' && vendorLocations[order.id] && (
+                    <p style={{
+                      fontSize: '0.78rem',
+                      color: 'var(--status-on-the-way)',
+                      marginTop: '0.4rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                    }}>
+                      <span className="spinner spinner-sm" style={{ width: '12px', height: '12px' }} />
+                      Vendor location updating live...
+                    </p>
+                  )}
+
+                  {/* Track Delivery Person button — always shown for on_the_way orders */}
+                  {order.status === 'on_the_way' && (() => {
+                    // Priority: live socket location > vendor stored lat/lng > delivery destination
+                    const livePos = vendorLocations[order.id];
+                    const vendorPos = order.vendor?.lat ? { lat: order.vendor.lat, lng: order.vendor.lng } : null;
+                    const deliveryPos = order.delivery_lat ? { lat: order.delivery_lat, lng: order.delivery_lng } : null;
+                    const trackPos = livePos || vendorPos || deliveryPos;
+
+                    const statusLabel = livePos
+                      ? '🟢 Live location available'
+                      : vendorPos
+                        ? '🔵 Last known vendor location'
+                        : '📦 Showing delivery destination';
+
+                    // Build Maps URL or show waiting state
+                    const dest = trackPos ? `${trackPos.lat},${trackPos.lng}` : null;
+                    const mapsUrl = dest
+                      ? `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`
+                      : null;
+
+                    return (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        marginTop: '0.75rem',
+                        padding: '0.6rem 0.9rem',
+                        background: 'rgba(139,92,246,0.08)',
+                        border: '1px solid rgba(139,92,246,0.25)',
+                        borderRadius: 'var(--radius-md)',
+                        flexWrap: 'wrap',
+                      }}>
+                        <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', flex: 1, minWidth: '140px' }}>
+                          {statusLabel}
+                        </span>
+                        {mapsUrl ? (
+                          <a
+                            href={mapsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn-directions"
+                            onClick={(e) => {
+                              const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                              if (isMobileDevice) {
+                                e.preventDefault();
+                                if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                                  window.location.href = `maps://maps.apple.com/?daddr=${dest}&dirflg=d`;
+                                } else {
+                                  window.location.href = `geo:${dest}?q=${dest}(Delivery+Person)`;
+                                }
+                                setTimeout(() => { window.open(mapsUrl, '_blank'); }, 800);
+                              }
+                            }}
+                            style={{ whiteSpace: 'nowrap' }}
+                          >
+                            📍 Track Delivery Person
+                          </a>
+                        ) : (
+                          <span style={{
+                            fontSize: '0.78rem',
+                            color: 'var(--text-muted)',
+                            padding: '0.35rem 0.75rem',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: 'var(--radius-full)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                          }}>
+                            <span className="spinner spinner-sm" style={{ width: '10px', height: '10px' }} />
+                            Waiting for vendor location...
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
+
+                {/* Cancel button — only for pending and accepted */}
+                {['pending', 'accepted'].includes(order.status) && (
+                  <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)' }}>
+                    <button
+                      id={`cancel-order-${order.id}`}
+                      className="btn btn-danger"
+                      style={{ width: '100%', justifyContent: 'center' }}
+                      disabled={cancellingId === order.id}
+                      onClick={(e) => { e.stopPropagation(); handleCancelOrder(order.id); }}
+                    >
+                      {cancellingId === order.id
+                        ? <><span className="spinner spinner-sm" /> Cancelling...</>
+                        : '🚫 Cancel Order'}
+                    </button>
+                  </div>
+                )}
               </OrderCard>
             ))
           )}
