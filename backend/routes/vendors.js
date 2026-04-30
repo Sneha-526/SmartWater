@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { supabase, supabaseAdmin } = require('../config/supabase'); // ✅ import shared supabase client
+const { supabase, supabaseAdmin } = require('../config/supabase');
 const { protect, vendorOnly } = require('../middleware/auth');
 
 // POST /api/vendors/register
@@ -11,10 +11,11 @@ router.post('/register', async (req, res) => {
     if (!name || !email || !phone || !password)
       return res.status(400).json({ success: false, message: 'Name, email, phone, and password are required.' });
 
+    // Create user with email_confirm: false so Supabase sends OTP
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      email_confirm: true,
+      email_confirm: false,
       user_metadata: { name, role: 'vendor', phone, address },
     });
 
@@ -30,25 +31,76 @@ router.post('/register', async (req, res) => {
       return res.status(500).json({ success: false, message: 'Vendor profile creation failed.' });
     }
 
-    // ✅ Sign in immediately after registration to return a token
-    const { data: signInData, error: signInError } = await supabase
-      .auth.signInWithPassword({ email, password });
-
-    if (signInError) {
-      return res.status(201).json({
-        success: true,
-        message: 'Vendor registration successful. Please sign in.',
-        vendor: { id: authData.user.id, name, email, phone, role: 'vendor' },
-      });
+    // Send OTP to email
+    const { error: otpError } = await supabase.auth.signInWithOtp({ email });
+    if (otpError) {
+      console.error('[Vendors] OTP send error:', otpError.message);
     }
 
     res.status(201).json({
       success: true,
-      token: signInData.session.access_token,
-      vendor: { id: authData.user.id, name, email, phone, address, role: 'vendor' },
+      message: 'Vendor account created! Please verify your email with the OTP sent.',
+      requiresOtp: true,
+      email,
+      vendorId: authData.user.id,
     });
   } catch (err) {
     console.error('[Vendors] Register error:', err.message);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+// POST /api/vendors/verify-otp
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp)
+      return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: otp,
+      type: 'email',
+    });
+
+    if (error)
+      return res.status(400).json({ success: false, message: error.message || 'Invalid OTP.' });
+
+    // Also confirm the email in admin
+    if (data.user) {
+      await supabaseAdmin.auth.admin.updateUser(data.user.id, { email_confirm: true });
+    }
+
+    const { data: vendor } = await supabaseAdmin
+      .from('vendors')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    res.json({
+      success: true,
+      message: 'Email verified successfully!',
+      token: data.session?.access_token,
+      vendor: vendor ? { ...vendor, role: 'vendor' } : { email, role: 'vendor' },
+    });
+  } catch (err) {
+    console.error('[Vendors] Verify OTP error:', err.message);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+// POST /api/vendors/resend-otp
+router.post('/resend-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required.' });
+
+    const { error } = await supabase.auth.signInWithOtp({ email });
+    if (error)
+      return res.status(400).json({ success: false, message: error.message });
+
+    res.json({ success: true, message: 'OTP sent to your email.' });
+  } catch (err) {
     res.status(500).json({ success: false, message: 'Server error.' });
   }
 });
@@ -60,7 +112,6 @@ router.post('/login', async (req, res) => {
     if (!email || !password)
       return res.status(400).json({ success: false, message: 'Email and password are required.' });
 
-    // ✅ Use shared supabase client instead of inline createClient
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error || !data.user)
@@ -96,6 +147,79 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// POST /api/vendors/google-auth — Handle Google OAuth sign-in for vendor
+router.post('/google-auth', async (req, res) => {
+  try {
+    const { access_token } = req.body;
+    if (!access_token)
+      return res.status(400).json({ success: false, message: 'Access token required.' });
+
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(access_token);
+    if (error || !user)
+      return res.status(401).json({ success: false, message: 'Invalid token.' });
+
+    // Upsert vendor profile
+    const { data: existing } = await supabaseAdmin
+      .from('vendors')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (!existing) {
+      await supabaseAdmin.from('vendors').insert({
+        id: user.id,
+        name: user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0],
+        email: user.email,
+        phone: user.user_metadata?.phone || '',
+        address: '',
+        role: 'vendor',
+        is_available: true,
+      });
+    }
+
+    // Ensure user_metadata has vendor role
+    if (!user.user_metadata?.role || user.user_metadata.role !== 'vendor') {
+      await supabaseAdmin.auth.admin.updateUser(user.id, {
+        user_metadata: { ...user.user_metadata, role: 'vendor' },
+      });
+    }
+
+    const { data: vendor } = await supabaseAdmin
+      .from('vendors')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    res.json({
+      success: true,
+      token: access_token,
+      vendor: vendor ? { ...vendor, role: 'vendor' } : { id: user.id, email: user.email, role: 'vendor' },
+    });
+  } catch (err) {
+    console.error('[Vendors] Google auth error:', err.message);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+// POST /api/vendors/forgot-password
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required.' });
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password`,
+    });
+
+    if (error)
+      return res.status(400).json({ success: false, message: error.message });
+
+    res.json({ success: true, message: 'Password reset link sent to your email.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
 // GET /api/vendors/me
 router.get('/me', protect, vendorOnly, async (req, res) => {
   try {
@@ -122,7 +246,6 @@ router.put('/availability', protect, vendorOnly, async (req, res) => {
     if (is_available === undefined)
       return res.status(400).json({ success: false, message: 'is_available is required.' });
 
-    // ✅ Remove .single() — just update without fetching back
     const { error } = await supabaseAdmin
       .from('vendors')
       .update({ is_available })
@@ -139,6 +262,7 @@ router.put('/availability', protect, vendorOnly, async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error.' });
   }
 });
+
 // PUT /api/vendors/location
 router.put('/location', protect, vendorOnly, async (req, res) => {
   try {

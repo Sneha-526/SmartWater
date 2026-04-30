@@ -8,7 +8,7 @@ const initSocket = (server) => {
   const { Server } = require('socket.io');
   io = new Server(server, {
     cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:5173',
+      origin: (origin, cb) => cb(null, true), // allow all origins in dev
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -69,6 +69,8 @@ const initSocket = (server) => {
   return io;
 };
 
+// ── Emit helpers ────────────────────────────────────────────────
+
 // Emit new order to all connected vendors
 const emitNewOrder = (order) => {
   if (io) {
@@ -79,7 +81,7 @@ const emitNewOrder = (order) => {
 
 // Emit order accepted to the specific user
 const emitOrderAccepted = (userId, order) => {
-  if (io) {
+  if (io && userId) {
     const socketId = connectedUsers.get(userId);
     if (socketId) {
       io.to(socketId).emit('orderAccepted', order);
@@ -88,9 +90,9 @@ const emitOrderAccepted = (userId, order) => {
   }
 };
 
-// Emit status update to the specific user
+// Emit status update to the specific USER (customer)
 const emitOrderStatusUpdate = (userId, order) => {
-  if (io) {
+  if (io && userId) {
     const socketId = connectedUsers.get(userId);
     if (socketId) {
       io.to(socketId).emit('orderStatusUpdate', order);
@@ -99,16 +101,28 @@ const emitOrderStatusUpdate = (userId, order) => {
   }
 };
 
-// Emit order removed from feed (accepted/rejected/cancelled) to vendors
+// Emit status update to a specific VENDOR
+const emitOrderStatusToVendor = (vendorId, order) => {
+  if (io && vendorId) {
+    const socketId = connectedVendors.get(vendorId);
+    if (socketId) {
+      io.to(socketId).emit('orderStatusUpdate', order);
+      console.log(`[Socket] Emitted orderStatusUpdate to vendor: ${vendorId}`);
+    }
+  }
+};
+
+// Emit order removed from feed (accepted/rejected/cancelled) to all vendors
 const emitOrderUnavailable = (orderId) => {
   if (io) {
     io.to('vendors').emit('orderUnavailable', { orderId });
+    console.log(`[Socket] Emitted orderUnavailable: ${orderId}`);
   }
 };
 
 // Emit vendor location to a specific user
 const emitVendorLocation = (userId, data) => {
-  if (io) {
+  if (io && userId) {
     const socketId = connectedUsers.get(userId);
     if (socketId) {
       io.to(socketId).emit('vendorLocation', data);
@@ -123,10 +137,10 @@ module.exports = {
   emitNewOrder,
   emitOrderAccepted,
   emitOrderStatusUpdate,
+  emitOrderStatusToVendor,
   emitOrderUnavailable,
   emitVendorLocation,
   getIO,
   connectedUsers,
   connectedVendors,
 };
-

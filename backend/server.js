@@ -13,7 +13,14 @@ initSocket(server);
 
 // Middleware  
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, cb) => {
+    // Allow all origins in development; in production, use CLIENT_URL
+    if (!origin || origin.includes('localhost') || origin === process.env.CLIENT_URL) {
+      cb(null, true);
+    } else {
+      cb(null, process.env.CLIENT_URL || true);
+    }
+  },
   credentials: true,
 }));
 

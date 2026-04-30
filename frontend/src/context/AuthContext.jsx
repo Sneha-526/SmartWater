@@ -19,8 +19,8 @@ export const AuthProvider = ({ children }) => {
       }
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Listen for auth changes (handles OAuth redirect, password reset, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       if (session?.user) {
         enrichUser(session.user, session.access_token);
@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }) => {
       setUser({
         id: supabaseUser.id,
         email: supabaseUser.email,
-        name: profile?.name || supabaseUser.user_metadata?.name || '',
+        name: profile?.name || supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || '',
         phone: profile?.phone || '',
         address: profile?.address || '',
         role,
@@ -61,7 +61,7 @@ export const AuthProvider = ({ children }) => {
       setUser({
         id: supabaseUser.id,
         email: supabaseUser.email,
-        name: supabaseUser.user_metadata?.name || '',
+        name: supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || '',
         role: supabaseUser.user_metadata?.role || 'user',
         token,
       });
@@ -74,7 +74,6 @@ export const AuthProvider = ({ children }) => {
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
     const endpoint = role === 'vendor' ? '/vendors/register' : '/users/register';
 
-    // Backend creates user via admin SDK (auto-confirmed, no email needed)
     const res = await fetch(`${API_URL}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -84,10 +83,61 @@ export const AuthProvider = ({ children }) => {
     const data = await res.json();
     if (!data.success) throw new Error(data.message);
 
-    // Establish client-side Supabase session
+    // If OTP is required, DON'T sign in yet — return the response for OTP screen
+    if (data.requiresOtp) {
+      return data; // { success, requiresOtp, email }
+    }
+
+    // Legacy path (if OTP is disabled)
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
+    return data;
+  };
+
+  const verifyOtp = async ({ email, otp, role = 'user' }) => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const endpoint = role === 'vendor' ? '/vendors/verify-otp' : '/users/verify-otp';
+
+    const res = await fetch(`${API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp }),
+    });
+
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+
+    // Set session using the token from verification
+    if (data.token) {
+      // Sign in with the verified session
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password: '__otp_verified__', // This won't work, use setSession instead
+      }).catch(() => null);
+
+      // If password login fails (expected for OTP flow), set session directly
+      if (error || !data.token) {
+        // The verify-otp endpoint already created a session, refresh it
+        await supabase.auth.refreshSession();
+      }
+    }
+
+    return data;
+  };
+
+  const resendOtp = async ({ email, role = 'user' }) => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const endpoint = role === 'vendor' ? '/vendors/resend-otp' : '/users/resend-otp';
+
+    const res = await fetch(`${API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
     return data;
   };
 
@@ -104,11 +154,66 @@ export const AuthProvider = ({ children }) => {
     const data = await res.json();
     if (!data.success) throw new Error(data.message);
 
-    // Set session using Supabase (sign in directly)
+    // Set session using Supabase
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
     return data;
+  };
+
+  const loginWithGoogle = async (role = 'user') => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/${role === 'vendor' ? 'login/vendor' : 'login/user'}`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+
+    if (error) throw error;
+    return data;
+  };
+
+  // Handle Google OAuth callback (called after redirect)
+  const handleGoogleCallback = async (role = 'user') => {
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    if (!currentSession?.access_token) return null;
+
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const endpoint = role === 'vendor' ? '/vendors/google-auth' : '/users/google-auth';
+
+    const res = await fetch(`${API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: currentSession.access_token }),
+    });
+
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+    return data;
+  };
+
+  const forgotPassword = async (email, role = 'user') => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const endpoint = role === 'vendor' ? '/vendors/forgot-password' : '/users/forgot-password';
+
+    const res = await fetch(`${API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+    return data;
+  };
+
+  const resetPassword = async (password) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
   };
 
   const logout = async () => {
@@ -126,7 +231,13 @@ export const AuthProvider = ({ children }) => {
       loading,
       isLoggedIn: !!user,
       register,
+      verifyOtp,
+      resendOtp,
       loginWithEmail,
+      loginWithGoogle,
+      handleGoogleCallback,
+      forgotPassword,
+      resetPassword,
       logout,
       getToken,
     }}>

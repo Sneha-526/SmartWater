@@ -6,8 +6,26 @@ const {
   emitNewOrder,
   emitOrderAccepted,
   emitOrderStatusUpdate,
+  emitOrderStatusToVendor,
   emitOrderUnavailable,
 } = require('../socket/socketManager');
+
+// Service area configuration
+const SERVICE_CENTER_LAT = parseFloat(process.env.SERVICE_CENTER_LAT) || 18.5204;
+const SERVICE_CENTER_LNG = parseFloat(process.env.SERVICE_CENTER_LNG) || 73.8567;
+const MAX_DELIVERY_RADIUS_KM = parseFloat(process.env.MAX_DELIVERY_RADIUS_KM) || 15;
+
+// Haversine formula
+const getDistanceKm = (lat1, lng1, lat2, lng2) => {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
 
 // POST /api/orders — Place new order (user only)
 router.post('/', protect, userOnly, async (req, res) => {
@@ -16,6 +34,18 @@ router.post('/', protect, userOnly, async (req, res) => {
 
     if (!deliveryAddress || !deliveryLocation || !items || items.length === 0)
       return res.status(400).json({ success: false, message: 'Delivery address, location, and items are required.' });
+
+    // Location restriction check
+    const distance = getDistanceKm(
+      deliveryLocation.lat, deliveryLocation.lng,
+      SERVICE_CENTER_LAT, SERVICE_CENTER_LNG
+    );
+    if (distance > MAX_DELIVERY_RADIUS_KM) {
+      return res.status(400).json({
+        success: false,
+        message: `Delivery location is ${distance.toFixed(1)} km away. We only deliver within ${MAX_DELIVERY_RADIUS_KM} km.`,
+      });
+    }
 
     const totalAmount = items.reduce((sum, item) => sum + item.price_per_unit * item.quantity, 0);
 
@@ -217,7 +247,10 @@ router.put('/:id/status', protect, vendorOnly, async (req, res) => {
     });
 
     const fullOrder = await getFullOrder(req.params.id);
+    // Notify customer of status change
     emitOrderStatusUpdate(order.user_id, fullOrder);
+    // Also notify the vendor so their dashboard updates in real-time
+    emitOrderStatusToVendor(req.user.id, fullOrder);
 
     res.json({ success: true, message: `Status updated to ${status}.`, order: fullOrder });
   } catch (err) {
@@ -281,11 +314,11 @@ router.put('/:id/cancel', protect, userOnly, async (req, res) => {
 
     const fullOrder = await getFullOrder(req.params.id);
 
-    // Notify vendor if order was already accepted
+    // Notify vendor via VENDOR socket (not user socket) if order was already accepted
     if (order.vendor_id) {
-      emitOrderStatusUpdate(order.vendor_id, fullOrder);
+      emitOrderStatusToVendor(order.vendor_id, fullOrder);
     }
-    // Remove from vendor feeds
+    // Remove from all vendors' pending feeds
     emitOrderUnavailable(req.params.id);
 
     res.json({ success: true, message: 'Order cancelled successfully.', order: fullOrder });

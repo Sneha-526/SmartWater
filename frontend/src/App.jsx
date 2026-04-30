@@ -5,6 +5,7 @@ import { useAuth } from './context/AuthContext';
 import LandingPage from './pages/LandingPage';
 import UserAuth from './pages/auth/UserAuth';
 import VendorAuth from './pages/auth/VendorAuth';
+import ResetPassword from './pages/auth/ResetPassword';
 import UserDashboard from './pages/user/UserDashboard';
 import PlaceOrder from './pages/user/PlaceOrder';
 import OrderHistory from './pages/user/OrderHistory';
@@ -70,6 +71,8 @@ const App = () => {
       />
       {/* Redirect old AI insights URL to user dashboard */}
       <Route path="/user/insights" element={<Navigate to="/user" replace />} />
+      {/* Password reset page (from email link) */}
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route
         path="/vendor"
         element={

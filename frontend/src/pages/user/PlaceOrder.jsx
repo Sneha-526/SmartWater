@@ -18,6 +18,25 @@ const CATEGORY_META = {
   alkaline:  { label: 'Alkaline',  icon: '💎', color: '#38bdf8' },
 };
 
+// Service area configuration (configurable via env vars)
+const SERVICE_CENTER = {
+  lat: parseFloat(import.meta.env.VITE_SERVICE_LAT) || 18.5204,
+  lng: parseFloat(import.meta.env.VITE_SERVICE_LNG) || 73.8567,
+};
+const MAX_DELIVERY_RADIUS_KM = parseFloat(import.meta.env.VITE_MAX_DELIVERY_KM) || 15;
+
+// Haversine formula to calculate distance between two coordinates in km
+const getDistanceKm = (lat1, lng1, lat2, lng2) => {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 const PlaceOrder = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -31,6 +50,7 @@ const PlaceOrder = () => {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [location, setLocation] = useState(null);
   const [locationName, setLocationName] = useState('');
+  const [locationDistance, setLocationDistance] = useState(null); // km from service center
   const [paymentMode, setPaymentMode] = useState('cod');
   const [notes, setNotes] = useState('');
 
@@ -94,7 +114,13 @@ const PlaceOrder = () => {
   const handleMapClick = useCallback((lat, lng) => {
     setLocation({ lat, lng });
     reverseGeocode(lat, lng);
-    toast('📍 Location pinned!', { icon: '✅' });
+    const dist = getDistanceKm(lat, lng, SERVICE_CENTER.lat, SERVICE_CENTER.lng);
+    setLocationDistance(Math.round(dist * 10) / 10);
+    if (dist > MAX_DELIVERY_RADIUS_KM) {
+      toast.error(`📍 Location is ${dist.toFixed(1)} km away — outside our ${MAX_DELIVERY_RADIUS_KM} km delivery zone.`);
+    } else {
+      toast('📍 Location pinned!', { icon: '✅' });
+    }
   }, []);
 
   const handleGPS = () => {
@@ -105,7 +131,13 @@ const PlaceOrder = () => {
         const { latitude: lat, longitude: lng } = pos.coords;
         setLocation({ lat, lng });
         reverseGeocode(lat, lng);
-        toast.success('📍 GPS acquired!');
+        const dist = getDistanceKm(lat, lng, SERVICE_CENTER.lat, SERVICE_CENTER.lng);
+        setLocationDistance(Math.round(dist * 10) / 10);
+        if (dist > MAX_DELIVERY_RADIUS_KM) {
+          toast.error(`📍 GPS location is ${dist.toFixed(1)} km away — outside delivery zone.`);
+        } else {
+          toast.success('📍 GPS acquired!');
+        }
         setGpsLoading(false);
       },
       () => { toast.error('GPS failed. Click on the map.'); setGpsLoading(false); },
@@ -118,6 +150,11 @@ const PlaceOrder = () => {
     if (!deliveryAddress.trim()) return toast.error('Enter delivery address.');
     if (!location) return toast.error('Select location on the map.');
     if (cartItems.length === 0) return toast.error('Add at least one product.');
+
+    // Location restriction check
+    if (locationDistance !== null && locationDistance > MAX_DELIVERY_RADIUS_KM) {
+      return toast.error(`Delivery location is ${locationDistance} km away. We only deliver within ${MAX_DELIVERY_RADIUS_KM} km.`);
+    }
 
     setLoading(true);
     try {
@@ -297,18 +334,35 @@ const PlaceOrder = () => {
                 </button>
                 <DeliveryMap position={location} onMapClick={handleMapClick} height={280} popupText="Delivery Here" />
                 {location ? (
-                  <p style={{
-                    fontSize: '0.82rem',
-                    color: locationName === 'Fetching location name...' ? 'var(--text-muted)' : 'var(--status-delivered)',
-                    marginTop: '0.5rem',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '0.35rem',
-                  }}>
-                    {locationName === 'Fetching location name...'
-                      ? <><span className="spinner spinner-sm" style={{ width: '12px', height: '12px', marginTop: '2px', flexShrink: 0 }} /> Fetching location name...</>
-                      : <>📍 <span><strong>Location set:</strong> {locationName}</span></>}
-                  </p>
+                  <div>
+                    <p style={{
+                      fontSize: '0.82rem',
+                      color: locationName === 'Fetching location name...' ? 'var(--text-muted)' : 'var(--status-delivered)',
+                      marginTop: '0.5rem',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '0.35rem',
+                    }}>
+                      {locationName === 'Fetching location name...'
+                        ? <><span className="spinner spinner-sm" style={{ width: '12px', height: '12px', marginTop: '2px', flexShrink: 0 }} /> Fetching location name...</>
+                        : <>📍 <span><strong>Location set:</strong> {locationName}</span></>}
+                    </p>
+                    {locationDistance !== null && (
+                      <p style={{
+                        fontSize: '0.78rem',
+                        marginTop: '0.35rem',
+                        padding: '0.35rem 0.65rem',
+                        borderRadius: '6px',
+                        background: locationDistance > MAX_DELIVERY_RADIUS_KM ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.12)',
+                        color: locationDistance > MAX_DELIVERY_RADIUS_KM ? '#ef4444' : '#22c55e',
+                        fontWeight: 600,
+                      }}>
+                        {locationDistance > MAX_DELIVERY_RADIUS_KM
+                          ? `⚠️ ${locationDistance} km away — Outside our ${MAX_DELIVERY_RADIUS_KM} km delivery zone`
+                          : `✅ ${locationDistance} km from service center — Within delivery range`}
+                      </p>
+                    )}
+                  </div>
                 ) : <p className="map-hint">🖱️ Click on the map to pin your delivery location</p>}
               </div>
 
