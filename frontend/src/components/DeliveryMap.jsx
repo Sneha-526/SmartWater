@@ -87,7 +87,7 @@ const DeliveryMap = ({
   const [route, setRoute] = useState(null);
   const defaultCenter = position?.lat
     ? [position.lat, position.lng]
-    : [20.5937, 78.9629];
+    : [28.5355, 77.3910]; // Default: Noida, UP
 
   // Fetch route when both positions available
   useEffect(() => {
