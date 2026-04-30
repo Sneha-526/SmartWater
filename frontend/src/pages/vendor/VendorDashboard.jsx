@@ -595,14 +595,22 @@ const VendorDashboard = () => {
         if (data.order) {
           setOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
         } else {
-          // Fallback: re-fetch all orders if server returned null
           await fetchOrders();
         }
         toast.success('✅ Order accepted!');
         setActiveTab('active');
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to accept order.');
+      const status = err.response?.status;
+      const msg = err.response?.data?.message;
+      if (status === 409) {
+        // Order was already accepted (by another vendor or race condition)
+        toast('This order was already taken.', { icon: '⚠️' });
+      } else {
+        toast.error(msg || 'Failed to accept order.');
+      }
+      // Always refresh orders so UI stays in sync with backend
+      await fetchOrders();
     } finally {
       setAccepting(null);
     }
@@ -621,6 +629,7 @@ const VendorDashboard = () => {
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to update status.');
+      await fetchOrders();
     }
   };
 

@@ -18,12 +18,12 @@ const CATEGORY_META = {
   alkaline:  { label: 'Alkaline',  icon: '💎', color: '#38bdf8' },
 };
 
-// Service area configuration (configurable via env vars)
+// Service area: Noida + Greater Noida
 const SERVICE_CENTER = {
-  lat: parseFloat(import.meta.env.VITE_SERVICE_LAT) || 18.5204,
-  lng: parseFloat(import.meta.env.VITE_SERVICE_LNG) || 73.8567,
+  lat: parseFloat(import.meta.env.VITE_SERVICE_LAT) || 28.5050, // Midpoint Noida-Greater Noida
+  lng: parseFloat(import.meta.env.VITE_SERVICE_LNG) || 77.4475,
 };
-const MAX_DELIVERY_RADIUS_KM = parseFloat(import.meta.env.VITE_MAX_DELIVERY_KM) || 15;
+const MAX_DELIVERY_RADIUS_KM = parseFloat(import.meta.env.VITE_MAX_DELIVERY_KM) || 25; // covers both Noida & Greater Noida
 
 // Haversine formula to calculate distance between two coordinates in km
 const getDistanceKm = (lat1, lng1, lat2, lng2) => {
@@ -124,24 +124,45 @@ const PlaceOrder = () => {
   }, []);
 
   const handleGPS = () => {
-    if (!navigator.geolocation) return toast.error('Geolocation not supported.');
+    if (!navigator.geolocation) return toast.error('Geolocation not supported by your browser.');
     setGpsLoading(true);
+    const toastId = toast.loading('📡 Acquiring GPS location...');
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        toast.dismiss(toastId);
         const { latitude: lat, longitude: lng } = pos.coords;
         setLocation({ lat, lng });
         reverseGeocode(lat, lng);
         const dist = getDistanceKm(lat, lng, SERVICE_CENTER.lat, SERVICE_CENTER.lng);
         setLocationDistance(Math.round(dist * 10) / 10);
         if (dist > MAX_DELIVERY_RADIUS_KM) {
-          toast.error(`📍 GPS location is ${dist.toFixed(1)} km away — outside delivery zone.`);
+          toast.error(`📍 Your location is ${dist.toFixed(1)} km away — outside our ${MAX_DELIVERY_RADIUS_KM} km delivery zone.`);
         } else {
-          toast.success('📍 GPS acquired!');
+          toast.success('📍 GPS location acquired!');
         }
         setGpsLoading(false);
       },
-      () => { toast.error('GPS failed. Click on the map.'); setGpsLoading(false); },
-      { timeout: 10000, enableHighAccuracy: true }
+      (err) => {
+        toast.dismiss(toastId);
+        // Try with lower accuracy as fallback
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude: lat, longitude: lng } = pos.coords;
+            setLocation({ lat, lng });
+            reverseGeocode(lat, lng);
+            const dist = getDistanceKm(lat, lng, SERVICE_CENTER.lat, SERVICE_CENTER.lng);
+            setLocationDistance(Math.round(dist * 10) / 10);
+            toast.success('📍 Location acquired (approximate).');
+            setGpsLoading(false);
+          },
+          () => {
+            toast.error('GPS unavailable. Please click on the map to set your location manually.');
+            setGpsLoading(false);
+          },
+          { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 

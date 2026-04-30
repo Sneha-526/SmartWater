@@ -200,8 +200,17 @@ router.put('/:id/accept', protect, vendorOnly, async (req, res) => {
     // Increment vendor total orders
     await supabaseAdmin.rpc('increment_vendor_orders', { vendor_id_param: req.user.id }).catch(() => { });
 
-    const fullOrder = await getFullOrder(req.params.id);
-    if (!fullOrder) throw new Error('Failed to retrieve accepted order.');
+    // Fetch full order (retry once if null due to replication lag)
+    let fullOrder = await getFullOrder(req.params.id);
+    if (!fullOrder) {
+      await new Promise(r => setTimeout(r, 500));
+      fullOrder = await getFullOrder(req.params.id);
+    }
+
+    // If still null, build a minimal response so frontend doesn't crash
+    if (!fullOrder) {
+      fullOrder = { id: req.params.id, status: 'accepted', vendor_id: req.user.id, user_id: existing.user_id };
+    }
 
     // Notify the customer that their order was accepted
     emitOrderAccepted(existing.user_id, fullOrder);
@@ -212,7 +221,7 @@ router.put('/:id/accept', protect, vendorOnly, async (req, res) => {
 
   } catch (err) {
     console.error('[Orders] Accept error:', err.message);
-    res.status(500).json({ success: false, message: 'Server error.' });
+    res.status(500).json({ success: false, message: err.message || 'Server error.' });
   }
 });
 
