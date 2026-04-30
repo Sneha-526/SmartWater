@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Navbar from '../../components/Navbar';
@@ -23,7 +23,7 @@ const SERVICE_CENTER = {
   lat: parseFloat(import.meta.env.VITE_SERVICE_LAT) || 28.5050, // Midpoint Noida-Greater Noida
   lng: parseFloat(import.meta.env.VITE_SERVICE_LNG) || 77.4475,
 };
-const MAX_DELIVERY_RADIUS_KM = parseFloat(import.meta.env.VITE_MAX_DELIVERY_KM) || 25; // covers both Noida & Greater Noida
+const MAX_DELIVERY_RADIUS_KM = parseFloat(import.meta.env.VITE_MAX_DELIVERY_KM) || 40; // covers Noida, Greater Noida & Dadri
 
 // Haversine formula to calculate distance between two coordinates in km
 const getDistanceKm = (lat1, lng1, lat2, lng2) => {
@@ -50,11 +50,30 @@ const PlaceOrder = () => {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [location, setLocation] = useState(null);
   const [locationName, setLocationName] = useState('');
-  const [locationDistance, setLocationDistance] = useState(null); // km from service center
+  const [locationDistance, setLocationDistance] = useState(null);
   const [paymentMode, setPaymentMode] = useState('cod');
   const [notes, setNotes] = useState('');
 
-  // Reverse geocode lat/lng → human-readable place name using Nominatim (free)
+  // Location search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchTimeoutRef = useRef(null);
+
+  // Set location and compute distance
+  const applyLocation = (lat, lng, name = null) => {
+    setLocation({ lat, lng });
+    const dist = getDistanceKm(lat, lng, SERVICE_CENTER.lat, SERVICE_CENTER.lng);
+    setLocationDistance(Math.round(dist * 10) / 10);
+    if (name) {
+      setLocationName(name);
+    } else {
+      reverseGeocode(lat, lng);
+    }
+  };
+
+  // Reverse geocode lat/lng → human-readable place name
   const reverseGeocode = async (lat, lng) => {
     setLocationName('Fetching location name...');
     try {
@@ -63,8 +82,7 @@ const PlaceOrder = () => {
         { headers: { 'Accept-Language': 'en' } }
       );
       const data = await res.json();
-      if (data && data.display_name) {
-        // Build a short, readable name: neighbourhood/suburb/city
+      if (data?.display_name) {
         const a = data.address || {};
         const parts = [
           a.road || a.pedestrian || a.footway,
@@ -79,6 +97,46 @@ const PlaceOrder = () => {
     } catch {
       setLocationName(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
     }
+  };
+
+  // Search address using Nominatim (restricted to India, near Noida)
+  const handleSearchInput = (val) => {
+    setSearchQuery(val);
+    setShowDropdown(false);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (!val.trim() || val.length < 3) { setSearchResults([]); return; }
+    searchTimeoutRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&addressdetails=1&limit=6&countrycodes=in`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        const results = await res.json();
+        setSearchResults(results);
+        setShowDropdown(true);
+      } catch { setSearchResults([]); }
+      finally { setSearchLoading(false); }
+    }, 500);
+  };
+
+  // Pick a result from the dropdown
+  const handlePickResult = (result) => {
+    const lat = parseFloat(result.lat);
+    const lng = parseFloat(result.lon);
+    const a = result.address || {};
+    const parts = [
+      a.road || a.pedestrian,
+      a.neighbourhood || a.suburb || a.quarter,
+      a.city || a.town || a.village || a.county,
+      a.state,
+    ].filter(Boolean);
+    const name = parts.slice(0, 3).join(', ') || result.display_name;
+    setSearchQuery(name);
+    setShowDropdown(false);
+    setSearchResults([]);
+    applyLocation(lat, lng, name);
+    toast.success('📍 Location set!');
   };
 
   // Fetch catalog
@@ -112,12 +170,10 @@ const PlaceOrder = () => {
   const total = cartItems.reduce((s, i) => s + i.subtotal, 0);
 
   const handleMapClick = useCallback((lat, lng) => {
-    setLocation({ lat, lng });
-    reverseGeocode(lat, lng);
+    applyLocation(lat, lng);
     const dist = getDistanceKm(lat, lng, SERVICE_CENTER.lat, SERVICE_CENTER.lng);
-    setLocationDistance(Math.round(dist * 10) / 10);
     if (dist > MAX_DELIVERY_RADIUS_KM) {
-      toast.error(`📍 Location is ${dist.toFixed(1)} km away — outside our ${MAX_DELIVERY_RADIUS_KM} km delivery zone.`);
+      toast.error('⚠️ We do not provide service in this area.');
     } else {
       toast('📍 Location pinned!', { icon: '✅' });
     }
@@ -174,7 +230,7 @@ const PlaceOrder = () => {
 
     // Location restriction check
     if (locationDistance !== null && locationDistance > MAX_DELIVERY_RADIUS_KM) {
-      return toast.error(`Delivery location is ${locationDistance} km away. We only deliver within ${MAX_DELIVERY_RADIUS_KM} km.`);
+      return toast.error('Sorry, we do not provide service in this area. Please choose a location within Noida or Greater Noida.');
     }
 
     setLoading(true);
@@ -343,26 +399,87 @@ const PlaceOrder = () => {
               {/* ── Delivery Location ── */}
               <div className="card">
                 <div className="section-title"><div className="title-icon">📍</div> Delivery Location</div>
+
+                {/* Address text input */}
                 <div className="form-group">
                   <label className="form-label">Delivery Address</label>
                   <input id="delivery-address" className="form-input" type="text"
-                    placeholder="Enter your full delivery address"
+                    placeholder="Flat no, street, sector, landmark"
                     value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} required />
                 </div>
-                <button type="button" className="btn btn-secondary" onClick={handleGPS} disabled={gpsLoading}
-                  id="use-gps-btn" style={{ marginBottom: '0.75rem' }}>
-                  {gpsLoading ? <><span className="spinner spinner-sm" /> Locating...</> : '📡 Use My GPS Location'}
-                </button>
+
+                {/* Location search */}
+                <div className="form-group" style={{ position: 'relative' }}>
+                  <label className="form-label">Search Location on Map</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div style={{ flex: 1, position: 'relative' }}>
+                      <input
+                        id="location-search"
+                        className="form-input"
+                        type="text"
+                        placeholder="Type area, sector, colony... e.g. Sector 62 Noida"
+                        value={searchQuery}
+                        onChange={(e) => handleSearchInput(e.target.value)}
+                        onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+                        autoComplete="off"
+                      />
+                      {searchLoading && (
+                        <span className="spinner spinner-sm" style={{
+                          position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)'
+                        }} />
+                      )}
+                      {showDropdown && searchResults.length > 0 && (
+                        <div style={{
+                          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999,
+                          background: 'var(--card-bg)', border: '1px solid var(--border-subtle)',
+                          borderRadius: 'var(--radius-md)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                          maxHeight: '220px', overflowY: 'auto', marginTop: '4px',
+                        }}>
+                          {searchResults.map((r, i) => {
+                            const a = r.address || {};
+                            const line1 = [a.road, a.neighbourhood || a.suburb, a.city || a.town || a.village].filter(Boolean).join(', ');
+                            const line2 = [a.state_district || a.county, a.state].filter(Boolean).join(', ');
+                            return (
+                              <div key={i}
+                                onClick={() => handlePickResult(r)}
+                                style={{
+                                  padding: '0.6rem 0.9rem', cursor: 'pointer',
+                                  borderBottom: i < searchResults.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                                  transition: 'background 0.15s',
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,210,255,0.08)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500 }}>
+                                  📍 {line1 || r.display_name.split(',').slice(0, 2).join(',')}
+                                </div>
+                                {line2 && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>{line2}</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <button type="button" className="btn btn-secondary" onClick={() => { setShowDropdown(false); handleGPS(); }}
+                      id="use-gps-btn" disabled={gpsLoading}
+                      style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+                      title="GPS may be inaccurate on laptops — use search for best results">
+                      {gpsLoading ? <><span className="spinner spinner-sm" /> Locating...</> : '📡 GPS'}
+                    </button>
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                    💡 Type your area above for best accuracy, or click on the map below
+                  </p>
+                </div>
+
                 <DeliveryMap position={location} onMapClick={handleMapClick} height={280} popupText="Delivery Here" />
+
                 {location ? (
-                  <div>
+                  <div style={{ marginTop: '0.5rem' }}>
                     <p style={{
                       fontSize: '0.82rem',
                       color: locationName === 'Fetching location name...' ? 'var(--text-muted)' : 'var(--status-delivered)',
-                      marginTop: '0.5rem',
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '0.35rem',
+                      display: 'flex', alignItems: 'flex-start', gap: '0.35rem',
                     }}>
                       {locationName === 'Fetching location name...'
                         ? <><span className="spinner spinner-sm" style={{ width: '12px', height: '12px', marginTop: '2px', flexShrink: 0 }} /> Fetching location name...</>
@@ -370,21 +487,18 @@ const PlaceOrder = () => {
                     </p>
                     {locationDistance !== null && (
                       <p style={{
-                        fontSize: '0.78rem',
-                        marginTop: '0.35rem',
-                        padding: '0.35rem 0.65rem',
-                        borderRadius: '6px',
+                        fontSize: '0.78rem', marginTop: '0.35rem',
+                        padding: '0.4rem 0.75rem', borderRadius: '6px', fontWeight: 600,
                         background: locationDistance > MAX_DELIVERY_RADIUS_KM ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.12)',
                         color: locationDistance > MAX_DELIVERY_RADIUS_KM ? '#ef4444' : '#22c55e',
-                        fontWeight: 600,
                       }}>
                         {locationDistance > MAX_DELIVERY_RADIUS_KM
-                          ? `⚠️ ${locationDistance} km away — Outside our ${MAX_DELIVERY_RADIUS_KM} km delivery zone`
+                          ? `⚠️ Sorry, we do not provide service in this area. Please choose a location within Noida or Greater Noida.`
                           : `✅ ${locationDistance} km from service center — Within delivery range`}
                       </p>
                     )}
                   </div>
-                ) : <p className="map-hint">🖱️ Click on the map to pin your delivery location</p>}
+                ) : <p className="map-hint">🖥️ Search above or click on the map to set your delivery location</p>}
               </div>
 
               {/* ── Payment & Notes ── */}
