@@ -99,7 +99,7 @@ const PlaceOrder = () => {
     }
   };
 
-  // Search address using Nominatim (restricted to India, near Noida)
+  // Search address using Nominatim — biased to Noida/Greater Noida area
   const handleSearchInput = (val) => {
     setSearchQuery(val);
     setShowDropdown(false);
@@ -108,16 +108,27 @@ const PlaceOrder = () => {
     searchTimeoutRef.current = setTimeout(async () => {
       setSearchLoading(true);
       try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&addressdetails=1&limit=6&countrycodes=in`,
+        // Noida/Greater Noida bounding box: SW(28.35,77.25) NE(28.72,77.75)
+        const viewbox = '77.25,28.72,77.75,28.35';
+        // First: search within Noida/GN area (bounded)
+        let res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val + ' Noida')}&format=json&addressdetails=1&limit=6&countrycodes=in&viewbox=${viewbox}&bounded=1`,
           { headers: { 'Accept-Language': 'en' } }
         );
-        const results = await res.json();
+        let results = await res.json();
+        // Fallback: if no local results, search India-wide
+        if (!results.length) {
+          res = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&addressdetails=1&limit=6&countrycodes=in`,
+            { headers: { 'Accept-Language': 'en' } }
+          );
+          results = await res.json();
+        }
         setSearchResults(results);
-        setShowDropdown(true);
+        setShowDropdown(results.length > 0);
       } catch { setSearchResults([]); }
       finally { setSearchLoading(false); }
-    }, 500);
+    }, 400);
   };
 
   // Pick a result from the dropdown
@@ -180,47 +191,45 @@ const PlaceOrder = () => {
   }, []);
 
   const handleGPS = () => {
+    // Detect if user is on a laptop/desktop (no real GPS chip)
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (!navigator.geolocation) return toast.error('Geolocation not supported by your browser.');
+
+    if (!isMobile) {
+      toast(
+        'GPS on laptops/PCs uses WiFi location (often inaccurate). Use the Search box above for best results.',
+        { icon: '⚠️', duration: 5000 }
+      );
+    }
+
     setGpsLoading(true);
-    const toastId = toast.loading('📡 Acquiring GPS location...');
+    const toastId = toast.loading('📡 Acquiring location...');
+
+    const onSuccess = (pos) => {
+      toast.dismiss(toastId);
+      const { latitude: lat, longitude: lng } = pos.coords;
+      setLocation({ lat, lng });
+      reverseGeocode(lat, lng);
+      const dist = getDistanceKm(lat, lng, SERVICE_CENTER.lat, SERVICE_CENTER.lng);
+      setLocationDistance(Math.round(dist * 10) / 10);
+      if (dist > MAX_DELIVERY_RADIUS_KM) {
+        toast.error('⚠️ We do not provide service in this area.');
+      } else {
+        toast.success('📍 Location acquired! Verify it looks correct on the map.');
+      }
+      setGpsLoading(false);
+    };
+    const onFinalError = () => {
+      toast.dismiss(toastId);
+      toast.error('Could not get location. Please use the Search box instead.');
+      setGpsLoading(false);
+    };
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        toast.dismiss(toastId);
-        const { latitude: lat, longitude: lng } = pos.coords;
-        setLocation({ lat, lng });
-        reverseGeocode(lat, lng);
-        const dist = getDistanceKm(lat, lng, SERVICE_CENTER.lat, SERVICE_CENTER.lng);
-        setLocationDistance(Math.round(dist * 10) / 10);
-        if (dist > MAX_DELIVERY_RADIUS_KM) {
-          toast.error(`📍 Your location is ${dist.toFixed(1)} km away — outside our ${MAX_DELIVERY_RADIUS_KM} km delivery zone.`);
-        } else {
-          toast.success('📍 GPS location acquired!');
-        }
-        setGpsLoading(false);
-      },
-      (err) => {
-        toast.dismiss(toastId);
-        // Try with lower accuracy as fallback
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const { latitude: lat, longitude: lng } = pos.coords;
-            setLocation({ lat, lng });
-            reverseGeocode(lat, lng);
-            const dist = getDistanceKm(lat, lng, SERVICE_CENTER.lat, SERVICE_CENTER.lng);
-            setLocationDistance(Math.round(dist * 10) / 10);
-            toast.success('📍 Location acquired (approximate).');
-            setGpsLoading(false);
-          },
-          () => {
-            toast.error('GPS unavailable. Please click on the map to set your location manually.');
-            setGpsLoading(false);
-          },
-          { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 }
-        );
-      },
+      onSuccess,
+      () => navigator.geolocation.getCurrentPosition(onSuccess, onFinalError,
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 }),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
