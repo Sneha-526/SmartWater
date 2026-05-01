@@ -10,10 +10,10 @@ const {
   emitOrderUnavailable,
 } = require('../socket/socketManager');
 
-// Service area configuration
-const SERVICE_CENTER_LAT = parseFloat(process.env.SERVICE_CENTER_LAT) || 18.5204;
-const SERVICE_CENTER_LNG = parseFloat(process.env.SERVICE_CENTER_LNG) || 73.8567;
-const MAX_DELIVERY_RADIUS_KM = parseFloat(process.env.MAX_DELIVERY_RADIUS_KM) || 15;
+// Service area: Noida + Greater Noida
+const SERVICE_CENTER_LAT = parseFloat(process.env.SERVICE_CENTER_LAT) || 28.5050;
+const SERVICE_CENTER_LNG = parseFloat(process.env.SERVICE_CENTER_LNG) || 77.4475;
+const MAX_DELIVERY_RADIUS_KM = parseFloat(process.env.MAX_DELIVERY_RADIUS_KM) || 40;
 
 // Haversine formula
 const getDistanceKm = (lat1, lng1, lat2, lng2) => {
